@@ -204,7 +204,7 @@ function slotMap() {
 const mySid = () => (state.user ? 'w_' + state.user.uid : null);
 const sortedSignups = () => Object.entries(state.signups || {})
   .filter(([, su]) => su && su.name)
-  .sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0));
+  .sort((a, b) => ((a[1].createdAt || 0) - (b[1].createdAt || 0)) || (a[0] < b[0] ? -1 : 1));
 
 function matchesPref(su, x) {
   if (!su) return false;
@@ -837,10 +837,39 @@ function onAuthChanged(user) {
   render();
 }
 
+// 資料庫還沒有配置時(隊長第一次登入):有舊版名單 legacy-roster.json 就整份搬過來,否則用預設配置
+let seeding = false;
 async function seedConfig() {
-  if (state.isAdmin && state.loaded.has('config') && state.config == null) {
+  if (seeding || !state.isAdmin || !state.loaded.has('config') || state.config != null) return;
+  seeding = true;
+  let legacy = null;
+  try {
+    const res = await fetch('legacy-roster.json', { cache: 'no-store' });
+    if (res.ok) legacy = await res.json();
+  } catch { /* 沒有舊名單就用預設 */ }
+  if (!legacy || !Array.isArray(legacy.groups)) {
     await write({ config: DEFAULT_CONFIG }, '已建立預設配置');
+    return;
   }
+  const ev = legacy.event || {};
+  const patch = {
+    config: {
+      event: { title: ev.title || DEFAULT_CONFIG.event.title, time: ev.time || '', note: ev.note || '' },
+      comp: legacy.groups.map(g => ({ role: g.role, slots: g.slots.map(s => ({ weapon: s.weapon || '', note: s.note || '' })) })),
+    },
+  };
+  let idx = 0, n = 0;
+  for (const g of legacy.groups) for (const s of g.slots) {
+    const name = String(s.player || '').trim().slice(0, 32);
+    if (name) {
+      const sid = `m_old${pad2(idx)}`;
+      patch[`signups/${sid}`] = { name, source: 'manual', fill: false, prefs: [canon(s.weapon)], createdAt: state.backend.serverTime() };
+      patch[`assign/s${idx}`] = sid;
+      n++;
+    }
+    idx++;
+  }
+  await write(patch, `已匯入舊名單(${n} 人)`);
 }
 
 async function captainLogin() {
