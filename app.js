@@ -1,26 +1,15 @@
-'use strict';
+import { FIREBASE_CONFIG } from './firebase-config.js';
 
-/* ================= 設定 ================= */
-const CONFIG = {
-  owner: 'bo1ba',
-  repo: 'bo1ba.github.io',
-  branch: 'main',
-  file: 'roster.json',
-  pollMs: 15000,      // 平常每 15 秒檢查一次
-  fastPollMs: 5000,   // 剛儲存、等待發布時每 5 秒檢查
-  // commit 用的中性身分,不留 GitHub 帳號的名字/信箱
-  identity: { name: 'roster', email: 'roster@bo1ba.invalid' },
-};
-const LS_TOKEN = 'albionRoster.token';
-const LS_ME = 'albionRoster.me';
-const LS_PENDING = 'albionRoster.pending';
-const PENDING_TTL = 10 * 60 * 1000;
+/* ================= 基本資料 ================= */
+const LS_ME = 'roster.me';
+const LS_FILTER = 'roster.filter';
+const MAX_PREFS = 3;
 
 const ROLES = {
-  tank: { zh: '坦克', en: 'TANK', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4 5v6c0 5.2 3.4 9.7 8 11 4.6-1.3 8-5.8 8-11V5l-8-3z"/></svg>' },
-  dps: { zh: '輸出', en: 'DPS', svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" y1="19" x2="19" y2="13"/><line x1="16" y1="16" x2="20" y2="20"/><line x1="19" y1="21" x2="21" y2="19"/><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"/><line x1="5" y1="14" x2="9" y2="18"/><line x1="7" y1="17" x2="4" y2="20"/><line x1="3" y1="19" x2="5" y2="21"/></svg>' },
-  support: { zh: '輔助', en: 'SUPPORT', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z"/></svg>' },
-  healer: { zh: '治療', en: 'HEALER', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.5 3h5v6.5H21v5h-6.5V21h-5v-6.5H3v-5h6.5z"/></svg>' },
+  tank: { zh: '坦克', en: 'TANK', emoji: '🛡️', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4 5v6c0 5.2 3.4 9.7 8 11 4.6-1.3 8-5.8 8-11V5l-8-3z"/></svg>' },
+  dps: { zh: '輸出', en: 'DPS', emoji: '⚔️', svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" y1="19" x2="19" y2="13"/><line x1="16" y1="16" x2="20" y2="20"/><line x1="19" y1="21" x2="21" y2="19"/><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"/><line x1="5" y1="14" x2="9" y2="18"/><line x1="7" y1="17" x2="4" y2="20"/><line x1="3" y1="19" x2="5" y2="21"/></svg>' },
+  support: { zh: '輔助', en: 'SUPPORT', emoji: '✨', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z"/></svg>' },
+  healer: { zh: '治療', en: 'HEALER', emoji: '➕', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.5 3h5v6.5H21v5h-6.5V21h-5v-6.5H3v-5h6.5z"/></svg>' },
 };
 
 // 武器/裝備名稱 → Albion 道具 ID(圖示來自 render.albiononline.com)
@@ -49,12 +38,45 @@ const ITEMS = [
   [['pve weapon', 'pve'], null, 'PvE Weapon', 'PvE 武器'],
 ];
 
+const DEFAULT_CONFIG = {
+  event: { title: '20 人隊伍名單', time: '', note: '' },
+  comp: [
+    { role: 'tank', slots: [
+      { weapon: 'heavy mace', note: 'bring incubus' },
+      { weapon: 'heavy mace', note: 'bring incubus' },
+      { weapon: 'hammer', note: '' },
+      { weapon: 'earthrune', note: 'Royal Armor' },
+    ] },
+    { role: 'dps', slots: [
+      { weapon: 'forge hammer', note: 'bring pve weapon' },
+      { weapon: 'melee', note: '' },
+      { weapon: 'lightcaller', note: '' },
+      { weapon: 'lightcaller', note: '' },
+      { weapon: 'lightcaller', note: '' },
+      { weapon: 'dawnsong', note: '' },
+      { weapon: 'Gloves', note: '' },
+      { weapon: 'shadowcaller', note: '' },
+    ] },
+    { role: 'support', slots: [
+      { weapon: 'Rootbound', note: 'Royal Armor bring occu' },
+      { weapon: 'oath', note: 'royal jacket bring pve weapon' },
+      { weapon: 'evensong', note: 'bring occu' },
+      { weapon: 'GA', note: '' },
+    ] },
+    { role: 'healer', slots: [
+      { weapon: 'Redemption', note: 'bring Royal robe' },
+      { weapon: 'Redemption', note: 'bring Royal robe' },
+      { weapon: 'Fallen', note: 'bring Royal robe' },
+      { weapon: 'blight', note: 'bring pve weapon' },
+    ] },
+  ],
+};
+
 /* ================= 小工具 ================= */
 const $ = (sel, root = document) => root.querySelector(sel);
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* 無痕模式等 */ } },
-  del(k) { try { localStorage.removeItem(k); } catch { /* ignore */ } },
 };
 
 function h(tag, attrs, ...kids) {
@@ -73,33 +95,33 @@ function h(tag, attrs, ...kids) {
   return el;
 }
 
+// Firebase 會把 [a,b] 存成 {0:a,1:b},讀回來可能是陣列也可能是物件
+function asList(v) {
+  if (Array.isArray(v)) return v.filter(x => x != null);
+  if (v && typeof v === 'object') return Object.keys(v).sort((a, b) => a - b).map(k => v[k]).filter(x => x != null);
+  return [];
+}
+
 const norm = s => String(s || '').toLowerCase().replace(/[’']/g, '').replace(/\s+/g, ' ').trim();
 const ITEM_INDEX = new Map();
 for (const [aliases, id, en, zh] of ITEMS) for (const a of aliases) ITEM_INDEX.set(a, { id, en, zh });
-
 function lookup(name) {
   const n = norm(name);
   if (!n) return null;
   return ITEM_INDEX.get(n) || ITEM_INDEX.get(n.replace(/s$/, '')) || null;
 }
+// 報名偏好用的武器代號,例如 'GA' → 'great arcane staff'
+const canon = weapon => { const it = lookup(weapon); return norm(it ? it.en : weapon); };
 
-// "Royal Armor bring occu" → [穿 Royal Armor] [帶 Occult Staff]
 function parseNote(note) {
   const text = String(note || '').trim();
   if (!text) return [];
   const [wear, ...rest] = text.split(/\bbring\b/i);
   const chips = [];
   const w = wear.trim();
-  if (w) {
-    const item = lookup(w);
-    chips.push({ kind: item ? 'wear' : 'info', text: w, item });
-  }
+  if (w) { const item = lookup(w); chips.push({ kind: item ? 'wear' : 'info', text: w, item }); }
   const b = rest.join(' bring ').trim();
-  if (b) {
-    for (const part of b.split(/\s*(?:,|\+|&|\/|\band\b)\s*/i).filter(Boolean)) {
-      chips.push({ kind: 'bring', text: part, item: lookup(part) });
-    }
-  }
+  if (b) for (const part of b.split(/\s*(?:,|\+|&|\/|\band\b)\s*/i).filter(Boolean)) chips.push({ kind: 'bring', text: part, item: lookup(part) });
   return chips;
 }
 
@@ -110,20 +132,16 @@ function iconImg(id, alt, size) {
   return img;
 }
 
-const roleOf = g => ROLES[g.role] || { zh: '隊伍', en: '', svg: ROLES.support.svg };
+const roleOf = g => ROLES[g.role] || { zh: '隊伍', en: '', emoji: '•', svg: ROLES.support.svg };
 const pad2 = n => String(n).padStart(2, '0');
-const allSlots = d => d.groups.flatMap((g, gi) => g.slots.map((s, si) => ({ s, g, gi, si })));
-const isFilled = s => !!String(s.player || '').trim();
 
-function rel(iso) {
-  if (!iso) return '';
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return '';
-  const sec = (Date.now() - t) / 1000;
+function rel(ts) {
+  if (!ts) return '';
+  const sec = (Date.now() - ts) / 1000;
   if (sec < 60) return '剛剛';
   if (sec < 3600) return `${Math.floor(sec / 60)} 分鐘前`;
   if (sec < 86400) return `${Math.floor(sec / 3600)} 小時前`;
-  return new Date(t).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+  return new Date(ts).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 let toastTimer = null;
@@ -135,183 +153,184 @@ function toast(msg, ms = 3200) {
   toastTimer = setTimeout(() => el.classList.remove('show'), ms);
 }
 
+function debounce(fn, ms) {
+  let t = null;
+  return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+}
+
+function errMsg(e) {
+  const s = String((e && (e.code || e.message)) || e);
+  if (/permission/i.test(s)) return '沒有權限(資料庫規則還沒設定,或你不是隊長)';
+  if (/network|offline/i.test(s)) return '網路連線有問題,請稍後再試';
+  return s;
+}
+
 /* ================= 狀態 ================= */
 const state = {
-  data: null,        // 目前顯示的名單
-  draft: null,       // 編輯中的副本
-  editing: false,
+  backend: null,
+  config: undefined,     // undefined = 還沒讀到;null = 資料庫裡沒有
+  assign: {},            // { s0: signupId, ... }
+  signups: {},           // { id: {name, source, prefs, fill, note, createdAt} }
+  loaded: new Set(),
+  connected: false,
+  user: null,
+  isAdmin: false,
   editComp: false,
-  dirty: false,
-  baseRev: 0,
-  pending: null,     // 剛儲存、等待 GitHub Pages 發布的 rev
-  error: null,
+  editEvent: false,
+  selected: null,        // 隊長點選中的卡片
+  dragging: null,
   query: '',
-  remoteWhileEditing: null,
+  filter: store.get(LS_FILTER) || 'all',
+  boardStale: false,
+  prevSlotSids: null,
+  knownSids: null,
+  dlg: null,
 };
-const view = () => (state.editing ? state.draft : state.data);
 
-/* ================= 讀取 / 同步 ================= */
-let pollTimer = null;
-let polling = false;
-
-async function fetchPublic() {
-  const res = await fetch(`${CONFIG.file}?t=${Date.now()}`, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.json();
-  if (!data || !Array.isArray(data.groups)) throw new Error('名單格式錯誤');
-  return data;
-}
-
-function schedulePoll() {
-  clearTimeout(pollTimer);
-  pollTimer = setTimeout(poll, state.pending ? CONFIG.fastPollMs : CONFIG.pollMs);
-}
-
-async function poll() {
-  clearTimeout(pollTimer);
-  if (polling) return;
-  if (document.hidden && state.data) return; // 分頁在背景時暫停,回來時立刻檢查
-  polling = true;
-  try {
-    const remote = await fetchPublic();
-    state.error = null;
-    applyRemote(remote);
-  } catch (e) {
-    state.error = e;
-    if (!state.data) $('#board').replaceChildren(h('div', { class: 'board-error' }, '⚠ 名單載入失敗,自動重試中…'));
-  } finally {
-    polling = false;
-    renderLive();
-    schedulePoll();
-  }
-}
-
-function readPending() {
-  try {
-    const p = JSON.parse(store.get(LS_PENDING) || 'null');
-    if (!p || !p.data || Date.now() - p.at > PENDING_TTL) { store.del(LS_PENDING); return null; }
-    return p;
-  } catch { store.del(LS_PENDING); return null; }
-}
-
-function applyRemote(remote) {
-  const rRev = remote.rev || 0;
-  const pending = readPending();
-  if (pending) {
-    if (rRev >= pending.rev) {
-      store.del(LS_PENDING);
-      if (state.pending) toast('✅ 新名單已同步給所有人');
-      state.pending = null;
-    } else {
-      // GitHub Pages 還在發布,先顯示自己剛存的版本
-      state.pending = pending.rev;
-      if (!state.data) { state.data = pending.data; render(); }
-      return;
-    }
-  }
-  if (!state.data) { state.data = remote; render(); return; }
-  if (rRev < (state.data.rev || 0)) return;
-  if (JSON.stringify(remote) === JSON.stringify(state.data)) return;
-  if (state.editing) { state.remoteWhileEditing = remote; return; }
-  const changed = diffSlots(state.data, remote);
-  state.data = remote;
-  render(changed);
-  toast(changed.size ? `🔄 名單已更新(${changed.size} 個位置有變動)` : '🔄 名單已更新');
-}
-
-function diffSlots(a, b) {
-  const pa = allSlots(a), pb = allSlots(b);
-  const out = new Set();
-  pb.forEach(({ s }, i) => {
-    const old = pa[i] && pa[i].s;
-    if (!old || norm(old.player) !== norm(s.player) || old.weapon !== s.weapon || old.note !== s.note) out.add(i);
-  });
+const cfg = () => state.config || DEFAULT_CONFIG;
+const comp = () => asList(cfg().comp).map(g => ({ ...g, slots: asList(g.slots) }));
+function flatSlots() {
+  const out = [];
+  comp().forEach((g, gi) => g.slots.forEach((s, si) => out.push({ g, gi, s, si, idx: out.length })));
   return out;
+}
+const signup = sid => (sid && state.signups && state.signups[sid]) || null;
+const sidAt = idx => { const sid = state.assign && state.assign['s' + idx]; return signup(sid) ? sid : null; };
+function slotMap() {
+  const m = new Map();
+  for (const x of flatSlots()) { const sid = sidAt(x.idx); if (sid && !m.has(sid)) m.set(sid, x.idx); }
+  return m;
+}
+const mySid = () => (state.user ? 'w_' + state.user.uid : null);
+const sortedSignups = () => Object.entries(state.signups || {})
+  .filter(([, su]) => su && su.name)
+  .sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0));
+
+function matchesPref(su, x) {
+  if (!su) return false;
+  return asList(su.prefs).some(p => (p.startsWith('role:') ? x.g.role === p.slice(5) : canon(x.s.weapon) === p));
 }
 
 /* ================= 畫面 ================= */
-function render(changed = new Set()) {
-  const d = view();
-  if (!d) return;
-  renderHeader(d);
-  renderOverview(d);
-  renderBoard(d, changed);
+function render() {
+  renderHeader();
+  renderOverview();
+  renderAdminBar();
+  renderMine();
+  renderToolbar();
   renderLive();
+  if (state.dragging || boardHasFocus()) state.boardStale = true;
+  else { renderBoard(); renderPool(); state.boardStale = false; }
+  renderSelBar();
   applySearch();
 }
+const boardHasFocus = () => !!document.activeElement && document.activeElement.matches('#board input');
+function flushStale() { if (state.boardStale && !state.dragging && !boardHasFocus()) render(); }
 
-function renderHeader(d) {
-  const ev = d.event || {};
+function renderHeader() {
+  const ev = cfg().event || {};
   const title = ev.title || '隊伍名單';
   $('#title').textContent = title;
   document.title = `${title} · Albion`;
   const meta = $('#eventMeta');
   meta.replaceChildren();
-  if (!state.editing) {
-    if (ev.time) meta.append(h('span', { class: 'meta-chip' }, '🕘 ', ev.time));
-    if (ev.note) meta.append(h('span', { class: 'meta-chip' }, '📢 ', ev.note));
+  if (ev.time) meta.append(h('span', { class: 'meta-chip' }, '🕘 ', ev.time));
+  if (ev.note) meta.append(h('span', { class: 'meta-chip' }, '📢 ', ev.note));
+  meta.hidden = !meta.children.length || (state.isAdmin && state.editEvent);
+  const edit = $('#eventEdit');
+  edit.hidden = !(state.isAdmin && state.editEvent);
+  if (!edit.hidden) for (const inp of edit.querySelectorAll('input')) {
+    if (document.activeElement !== inp) inp.value = ev[inp.dataset.key] || '';
   }
-  meta.hidden = !meta.children.length;
 }
 
-function renderOverview(d) {
-  const slots = allSlots(d);
-  const filled = slots.filter(x => isFilled(x.s)).length;
+function renderOverview() {
+  const slots = flatSlots();
+  const groups = comp();
+  const filled = slots.filter(x => sidAt(x.idx)).length;
   $('#filledNum').textContent = filled;
   $('#totalNum').textContent = slots.length;
   $('.fill').classList.toggle('full', slots.length > 0 && filled === slots.length);
 
   const bar = $('#segbar');
-  bar.replaceChildren();
-  let i = 0;
-  for (const g of d.groups) {
+  bar.replaceChildren(...groups.map((g, gi) => {
     const grp = h('div', { class: `seg-group role-${g.role || 'other'}`, style: `flex:${g.slots.length} 1 0` });
-    for (const s of g.slots) {
-      const w = lookup(s.weapon);
-      i++;
-      grp.append(h('div', { class: 'seg' + (isFilled(s) ? ' on' : ''), title: `#${pad2(i)} ${w ? w.en : s.weapon} — ${isFilled(s) ? s.player.trim() : '空缺'}` }));
+    for (const x of slots.filter(y => y.gi === gi)) {
+      const su = signup(sidAt(x.idx));
+      const w = lookup(x.s.weapon);
+      grp.append(h('div', { class: 'seg' + (su ? ' on' : ''), title: `#${pad2(x.idx + 1)} ${w ? w.en : x.s.weapon} — ${su ? su.name : '空缺'}` }));
     }
-    bar.append(grp);
-  }
-
-  const legend = $('#legend');
-  legend.replaceChildren(...d.groups.map(g => {
-    const n = g.slots.filter(isFilled).length;
-    return h('span', { class: `role-${g.role || 'other'}` }, h('i'), g.name || roleOf(g).zh, ' ', h('b', {}, `${n}/${g.slots.length}`));
+    return grp;
   }));
-
-  document.querySelectorAll('.group-count').forEach(el => {
-    const g = d.groups[+el.dataset.g];
-    if (!g) return;
-    const n = g.slots.filter(isFilled).length;
-    el.textContent = `${n}/${g.slots.length}`;
-    el.classList.toggle('full', n === g.slots.length);
-  });
+  $('#legend').replaceChildren(...groups.map((g, gi) => {
+    const mine = slots.filter(x => x.gi === gi);
+    const n = mine.filter(x => sidAt(x.idx)).length;
+    return h('span', { class: `role-${g.role || 'other'}` }, h('i'), g.name || roleOf(g).zh, ' ', h('b', {}, `${n}/${mine.length}`));
+  }));
 }
 
-function emblem(role) {
-  const el = h('span', { class: 'role-emblem', 'aria-hidden': 'true' });
-  el.innerHTML = role.svg; // 固定的內建 SVG 字串
-  return el;
+function renderLive() {
+  const live = $('#live'), txt = $('#liveText');
+  live.classList.remove('pending', 'error');
+  if (!state.backend) { live.classList.add('error'); txt.textContent = '尚未連接資料庫'; return; }
+  if (!state.connected) { live.classList.add('pending'); txt.textContent = '連線中…'; return; }
+  txt.textContent = `即時同步中 · ${sortedSignups().length} 人報名`;
 }
 
-function renderBoard(d, changed) {
+function renderToolbar() {
+  const btn = $('#signupBtn');
+  btn.disabled = !state.backend || !state.loaded.has('signups');
+  btn.textContent = signup(mySid()) ? '✏️ 修改報名' : '📝 我要報名';
+  $('#loginBtn').hidden = state.isAdmin || !state.backend;
+}
+
+function renderAdminBar() {
+  const on = state.isAdmin;
+  document.body.classList.toggle('is-admin', on);
+  $('#adminbar').hidden = !on;
+  $('#evToggle').setAttribute('aria-pressed', String(state.editEvent));
+  $('#compToggle').setAttribute('aria-pressed', String(state.editComp));
+}
+
+function srcBadge(source) {
+  if (source === 'discord') return h('span', { class: 'src src-discord', title: '從 Discord 報名' }, 'DC');
+  if (source === 'manual') return h('span', { class: 'src src-manual', title: '隊長新增' }, '隊長');
+  return h('span', { class: 'src src-web', title: '從網站報名' }, '網站');
+}
+
+function prefChip(p) {
+  if (p.startsWith('role:')) {
+    const r = ROLES[p.slice(5)];
+    return h('span', { class: `pchip pchip-role role-${p.slice(5)}` }, r ? `${r.emoji} ${r.zh}` : p);
+  }
+  const it = lookup(p);
+  return h('span', { class: 'pchip', title: it ? it.zh : null },
+    it && it.id ? iconImg(it.id, it.en, 44) : null, h('span', {}, it ? it.en : p));
+}
+const fillChip = () => h('span', { class: 'pchip pchip-fill' }, '🪑 補位');
+
+/* ---------- 名單(20 個位置) ---------- */
+function renderBoard() {
   const board = $('#board');
+  const slots = flatSlots();
+  const groups = comp();
+  const cur = slots.map(x => sidAt(x.idx));
+  const prev = state.prevSlotSids;
+  state.prevSlotSids = cur;
   board.replaceChildren();
-  board.classList.toggle('auto', d.groups.length !== 4);
-  let idx = 0;
-  d.groups.forEach((g, gi) => {
+  board.classList.toggle('auto', groups.length !== 4);
+  groups.forEach((g, gi) => {
     const role = roleOf(g);
-    const n = g.slots.filter(isFilled).length;
+    const mine = slots.filter(x => x.gi === gi);
+    const n = mine.filter(x => sidAt(x.idx)).length;
+    const emblem = h('span', { class: 'role-emblem', 'aria-hidden': 'true' });
+    emblem.innerHTML = role.svg; // 內建固定 SVG
     const head = h('header', { class: 'group-head' },
-      emblem(role),
+      emblem,
       h('div', { class: 'group-title' }, g.name || role.zh, role.en ? h('small', {}, role.en) : null),
-      h('span', { class: 'group-count' + (n === g.slots.length ? ' full' : ''), 'data-g': gi }, `${n}/${g.slots.length}`));
+      h('span', { class: 'group-count' + (n === mine.length ? ' full' : '') }, `${n}/${mine.length}`));
     const list = h('div', { class: 'slots' });
-    g.slots.forEach((s, si) => {
-      list.append(renderSlot(s, gi, si, idx, changed.has(idx)));
-      idx++;
-    });
+    for (const x of mine) list.append(renderSlot(x, !!prev && prev[x.idx] !== cur[x.idx]));
     board.append(h('section', { class: `group g${gi} role-${g.role || 'other'}` }, head, list));
   });
 }
@@ -323,7 +342,7 @@ function slotIcon(s, idx) {
     w && w.id ? iconImg(w.id, w.en, 96) : h('span', { class: 'glyph' }, '⚔'));
 }
 
-function chipEl(c) {
+function noteChip(c) {
   const label = c.kind === 'wear' ? '穿' : c.kind === 'bring' ? '帶' : null;
   return h('span', { class: `chip k-${c.kind}`, title: c.item ? c.item.zh : null },
     label ? h('b', {}, label) : null,
@@ -331,109 +350,437 @@ function chipEl(c) {
     h('span', {}, c.item ? c.item.en : c.text));
 }
 
-function renderSlot(s, gi, si, idx, flash) {
-  const name = String(s.player || '').trim();
+function renderSlot(x, flash) {
+  const { s, idx } = x;
+  const admin = state.isAdmin;
+  const sid = sidAt(idx);
+  const su = signup(sid);
   const w = lookup(s.weapon);
-  const el = h('article', { class: `slot ${name ? 'is-filled' : 'is-open'}${flash ? ' flash' : ''}`, 'data-idx': idx });
-  el.dataset.player = norm(name);
+  const sel = signup(state.selected);
+  const cls = ['slot', su ? 'is-filled' : 'is-open'];
+  if (flash) cls.push('flash');
+  if (admin && sel && matchesPref(sel, x)) cls.push('is-suggest');
+  if (admin && sid && sid === state.selected) cls.push('is-selected');
+  const el = h('article', { class: cls.join(' '), 'data-idx': idx });
+  el.dataset.player = norm(su && su.name);
 
   const info = h('div', { class: 'slot-info' });
   let chips = null;
-  if (state.editing && state.editComp) {
-    info.append(compInputs(s));
+  if (admin && state.editComp) {
+    info.append(compInputs(s, idx));
   } else {
     info.append(h('div', { class: 'w-en' }, w ? w.en : (s.weapon || '—')));
     if (w && w.zh) info.append(h('div', { class: 'w-zh' }, w.zh));
     const list = parseNote(s.note);
-    if (list.length) chips = h('div', { class: 'chips' }, list.map(chipEl));
+    if (list.length) chips = h('div', { class: 'chips' }, list.map(noteChip));
   }
 
   const player = h('div', { class: 'slot-player' });
-  if (state.editing) player.append(playerInput(s, idx));
-  else if (name) player.append(h('span', { class: 'p-at' }, '@'), h('span', { class: 'p-name', title: name }, name));
-  else player.append(h('span', { class: 'p-open' }, '空缺 · OPEN'));
-
+  if (su) {
+    const mini = h('div', { class: 'mini', title: su.name }, srcBadge(su.source), h('span', { class: 'p-name' }, su.name));
+    if (admin) {
+      mini.draggable = true;
+      bindDrag(mini, sid);
+      mini.append(h('button', { class: 'mini-x', type: 'button', title: '移回報名池', 'aria-label': '移回報名池', onclick: e => { e.stopPropagation(); unassign(sid); } }, '✕'));
+    }
+    player.append(mini);
+  } else {
+    player.append(h('span', { class: 'p-open' }, admin && state.selected ? '點這裡放入' : '空缺 · OPEN'));
+  }
   el.append(h('div', { class: 'slot-top' }, slotIcon(s, idx), info), chips || '', player);
+
+  if (admin) {
+    el.addEventListener('click', e => {
+      if (e.target.closest('input, button')) return;
+      if (state.selected) assignTo(state.selected, idx);
+      else if (sid) select(sid);
+    });
+    el.addEventListener('dragover', e => { if (state.dragging) { e.preventDefault(); el.classList.add('drop-over'); } });
+    el.addEventListener('dragleave', () => el.classList.remove('drop-over'));
+    el.addEventListener('drop', e => {
+      e.preventDefault();
+      const dropped = e.dataTransfer.getData('text/plain') || state.dragging;
+      endDrag();
+      if (dropped) assignTo(dropped, idx);
+    });
+  }
   return el;
 }
 
-function playerInput(s, idx) {
-  const inp = h('input', { class: 'inp', type: 'text', placeholder: '輸入玩家名字', 'data-idx': idx, autocomplete: 'off', spellcheck: 'false', maxlength: '40', 'aria-label': `第 ${idx + 1} 位玩家` });
-  inp.value = s.player || '';
-  inp.addEventListener('input', () => {
-    s.player = inp.value;
-    state.dirty = true;
-    const slot = inp.closest('.slot');
-    const f = !!inp.value.trim();
-    slot.classList.toggle('is-filled', f);
-    slot.classList.toggle('is-open', !f);
-    renderOverview(state.draft);
-  });
-  inp.addEventListener('keydown', e => {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    const next = document.querySelector(`.slot-player input[data-idx="${idx + 1}"]`);
-    if (next) next.focus(); else inp.blur();
-  });
-  return inp;
+const saveComp = debounce(() => {
+  if (!state.isAdmin || !state.config) return;
+  write({ 'config/comp': state.config.comp }, '配置已更新');
+}, 700);
+
+// 直接指向 state.config.comp 裡的 slot 物件(編輯時就地修改)
+function configSlots() {
+  if (!state.config) return [];
+  state.config.comp = asList(state.config.comp);
+  const out = [];
+  for (const g of state.config.comp) { g.slots = asList(g.slots); out.push(...g.slots); }
+  return out;
 }
 
-function compInputs(s) {
+function compInputs(s, idx) {
   const wInp = h('input', { class: 'inp', type: 'text', placeholder: '武器(例:heavy mace)', 'aria-label': '武器', spellcheck: 'false' });
   const nInp = h('input', { class: 'inp', type: 'text', placeholder: '備註(例:bring incubus)', 'aria-label': '備註', spellcheck: 'false' });
   wInp.value = s.weapon || '';
   nInp.value = s.note || '';
   wInp.addEventListener('input', () => {
-    s.weapon = wInp.value;
-    state.dirty = true;
-    const slot = wInp.closest('.slot');
-    slot.querySelector('.slot-icon').replaceWith(slotIcon(s, +slot.dataset.idx));
+    const t = configSlots()[idx];
+    if (!t) return;
+    t.weapon = wInp.value;
+    wInp.closest('.slot').querySelector('.slot-icon').replaceWith(slotIcon(t, idx));
+    saveComp();
   });
-  nInp.addEventListener('input', () => { s.note = nInp.value; state.dirty = true; });
+  nInp.addEventListener('input', () => {
+    const t = configSlots()[idx];
+    if (!t) return;
+    t.note = nInp.value;
+    saveComp();
+  });
+  for (const inp of [wInp, nInp]) inp.addEventListener('blur', () => setTimeout(flushStale, 0));
   return h('div', { class: 'comp-edit' }, wInp, nInp);
 }
 
-function renderLive() {
-  const live = $('#live'), txt = $('#liveText');
-  live.classList.remove('pending', 'error', 'editing');
-  const d = state.data;
-  if (state.editing) {
-    live.classList.add('editing');
-    txt.textContent = '編輯中 — 按「儲存並同步」後其他人才會看到';
-  } else if (state.pending) {
-    live.classList.add('pending');
-    txt.textContent = '已儲存,發布中… 約 1 分鐘內所有人同步';
-  } else if (state.error) {
-    live.classList.add('error');
-    txt.textContent = '連線中斷,自動重試中…';
-  } else if (d) {
-    txt.textContent = `即時同步中 · 最後更新 ${rel(d.updatedAt)}`;
+/* ---------- 報名池(卡片) ---------- */
+function renderPool() {
+  const pool = $('#pool');
+  const admin = state.isAdmin;
+  const list = sortedSignups();
+  const smap = slotMap();
+  const nAssigned = list.filter(([sid]) => smap.has(sid)).length;
+  const nFill = list.filter(([, su]) => su.fill).length;
+  const filters = [['all', `全部 ${list.length}`], ['open', `未排 ${list.length - nAssigned}`], ['fill', `補位 ${nFill}`]];
+
+  const head = h('div', { class: 'pool-head' },
+    h('h2', {}, '📋 報名名單'),
+    h('div', { class: 'seg-filter', role: 'tablist' }, filters.map(([k, label]) =>
+      h('button', {
+        type: 'button', class: state.filter === k ? 'on' : null, role: 'tab', 'aria-selected': String(state.filter === k),
+        onclick: () => { state.filter = k; store.set(LS_FILTER, k); renderPool(); applySearch(); },
+      }, label))),
+    admin ? h('button', { class: 'btn small', type: 'button', onclick: () => openSignup('admin-new') }, '➕ 新增') : null);
+
+  const shown = list.filter(([sid, su]) => (state.filter === 'open' ? !smap.has(sid) : state.filter === 'fill' ? su.fill : true));
+  const grid = h('div', { class: 'pool-grid' });
+  shown.forEach(([sid, su]) => grid.append(renderCard(sid, su, smap.get(sid), list.findIndex(([x]) => x === sid) + 1)));
+  if (!shown.length) grid.append(h('div', { class: 'pool-empty' }, list.length ? '這個分類沒有人' : '還沒有人報名,搶頭香!'));
+  pool.replaceChildren(head, grid, admin ? h('p', { class: 'pool-hint' }, '把名單上的人拖回這裡 = 取消排位') : '');
+}
+
+function bindPoolDrop() {
+  const pool = $('#pool');
+  pool.addEventListener('dragover', e => {
+    if (state.isAdmin && state.dragging && slotMap().has(state.dragging)) { e.preventDefault(); pool.classList.add('drop-over'); }
+  });
+  pool.addEventListener('dragleave', e => { if (!pool.contains(e.relatedTarget)) pool.classList.remove('drop-over'); });
+  pool.addEventListener('drop', e => {
+    if (!state.isAdmin) return;
+    e.preventDefault();
+    pool.classList.remove('drop-over');
+    const sid = e.dataTransfer.getData('text/plain') || state.dragging;
+    endDrag();
+    if (sid) unassign(sid);
+  });
+}
+
+function renderCard(sid, su, slotIdx, order) {
+  const admin = state.isAdmin;
+  const mine = sid === mySid();
+  const cls = ['card'];
+  if (slotIdx != null) cls.push('is-assigned');
+  if (state.selected === sid) cls.push('is-selected');
+  if (mine) cls.push('is-mine');
+  const el = h('div', { class: cls.join(' '), 'data-sid': sid });
+  el.dataset.player = norm(su.name);
+  let slotLabel = null;
+  if (slotIdx != null) {
+    const x = flatSlots()[slotIdx];
+    const w = x && lookup(x.s.weapon);
+    slotLabel = h('span', { class: `card-slot role-${x ? x.g.role : 'other'}` }, `#${pad2(slotIdx + 1)} ${w ? w.en : (x ? x.s.weapon : '')}`);
+  }
+  const prefs = asList(su.prefs);
+  el.append(...[
+    h('div', { class: 'card-top' },
+      h('span', { class: 'card-no' }, order),
+      srcBadge(su.source),
+      h('b', { class: 'card-name', title: su.name }, su.name),
+      mine ? h('span', { class: 'you' }, '你') : null),
+    slotLabel ? h('div', { class: 'card-assigned' }, '已排 ', slotLabel) : null,
+    (prefs.length || su.fill) ? h('div', { class: 'pchips' }, prefs.map(prefChip), su.fill ? fillChip() : null) : null,
+    su.note ? h('div', { class: 'card-note' }, su.note) : null,
+    h('div', { class: 'card-meta' },
+      h('span', {}, rel(su.createdAt)),
+      admin ? h('span', { class: 'card-actions' },
+        h('button', { type: 'button', title: '編輯', 'aria-label': '編輯', onclick: e => { e.stopPropagation(); openSignup('admin-edit', sid); } }, '✎'),
+        h('button', { type: 'button', title: '刪除', 'aria-label': '刪除', onclick: e => { e.stopPropagation(); deleteCard(sid); } }, '🗑')) : null),
+  ].filter(Boolean));
+  if (admin) {
+    el.draggable = true;
+    bindDrag(el, sid);
+    el.addEventListener('click', e => { if (!e.target.closest('button')) select(state.selected === sid ? null : sid); });
+  }
+  return el;
+}
+
+/* ---------- 我的報名 ---------- */
+function renderMine() {
+  const box = $('#mine');
+  const sid = mySid();
+  const su = signup(sid);
+  if (!su) { box.hidden = true; box.replaceChildren(); return; }
+  const idx = slotMap().get(sid);
+  let status;
+  if (idx != null) {
+    const x = flatSlots()[idx];
+    const w = lookup(x.s.weapon);
+    status = h('span', { class: 'mine-status ok' }, `🎯 已排在 #${pad2(idx + 1)} ${w ? w.en : x.s.weapon}(${roleOf(x.g).zh})`);
+  } else {
+    status = h('span', { class: 'mine-status' }, '⏳ 等待隊長排位');
+  }
+  box.hidden = false;
+  box.replaceChildren(
+    h('div', { class: 'mine-main' }, h('b', {}, `✅ 你已報名:${su.name}`), status),
+    h('div', { class: 'pchips' }, asList(su.prefs).map(prefChip), su.fill ? fillChip() : null),
+    h('div', { class: 'mine-actions' },
+      h('button', { class: 'btn small', type: 'button', onclick: () => openSignup('self-edit', sid) }, '✏️ 修改'),
+      h('button', { class: 'btn small danger', type: 'button', onclick: withdraw }, '取消報名')));
+}
+
+/* ---------- 隊長:選取 / 拖曳 / 排位 ---------- */
+function select(sid) {
+  state.selected = sid;
+  render();
+}
+
+function renderSelBar() {
+  const bar = $('#selbar');
+  const su = state.isAdmin ? signup(state.selected) : null;
+  document.body.classList.toggle('has-sel', !!su);
+  if (!su) { bar.hidden = true; return; }
+  const assigned = slotMap().has(state.selected);
+  bar.hidden = false;
+  bar.replaceChildren(...[
+    h('span', { class: 'sel-text' }, '已選 ', h('b', {}, su.name), ' — 點一個位置放入'),
+    assigned ? h('button', { class: 'btn small', type: 'button', onclick: () => unassign(state.selected) }, '移回報名池') : null,
+    h('button', { class: 'btn small ghost', type: 'button', onclick: () => select(null) }, '取消'),
+  ].filter(Boolean));
+}
+
+function bindDrag(el, sid) {
+  el.addEventListener('dragstart', e => {
+    e.stopPropagation();
+    state.dragging = sid;
+    e.dataTransfer.setData('text/plain', sid);
+    e.dataTransfer.effectAllowed = 'move';
+    document.body.classList.add('dragging');
+    const su = signup(sid);
+    for (const x of flatSlots()) {
+      const slot = document.querySelector(`.slot[data-idx="${x.idx}"]`);
+      if (slot) slot.classList.toggle('is-suggest', matchesPref(su, x));
+    }
+  });
+  el.addEventListener('dragend', endDrag);
+}
+
+function endDrag() {
+  if (!state.dragging) return;
+  state.dragging = null;
+  document.body.classList.remove('dragging');
+  document.querySelectorAll('.drop-over').forEach(x => x.classList.remove('drop-over'));
+  document.querySelectorAll('.slot.is-suggest').forEach(x => x.classList.remove('is-suggest'));
+  setTimeout(flushStale, 0);
+}
+
+async function write(patch, okMsg) {
+  try {
+    await state.backend.update(patch);
+    if (okMsg) toast(okMsg);
+    return true;
+  } catch (e) {
+    console.error(e);
+    toast('⚠ 寫入失敗:' + errMsg(e), 5000);
+    return false;
   }
 }
 
-/* ================= 搜尋 ================= */
+// 順便清掉指向已刪除報名、或重複指向同一人的排位
+function cleanupPatch(patch) {
+  const seen = new Set();
+  for (const [k, sid] of Object.entries(state.assign || {})) {
+    const key = `assign/${k}`;
+    if (key in patch) { if (patch[key]) seen.add(patch[key]); continue; }
+    if (!signup(sid) || seen.has(sid) || Object.values(patch).includes(sid)) patch[key] = null;
+    else seen.add(sid);
+  }
+  return patch;
+}
+
+async function assignTo(sid, idx) {
+  if (!signup(sid)) return;
+  const from = slotMap().get(sid);
+  state.selected = null;
+  if (from === idx) { render(); return; }
+  const occupant = sidAt(idx);
+  const patch = { [`assign/s${idx}`]: sid };
+  if (from != null) patch[`assign/s${from}`] = occupant || null;   // 從別的位置拖來 = 互換
+  await write(cleanupPatch(patch));
+}
+
+async function unassign(sid) {
+  const from = slotMap().get(sid);
+  state.selected = null;
+  if (from == null) { render(); return; }
+  await write(cleanupPatch({ [`assign/s${from}`]: null }));
+}
+
+async function deleteCard(sid) {
+  const su = signup(sid);
+  if (!su || !confirm(`刪除「${su.name}」的報名?`)) return;
+  const patch = { [`signups/${sid}`]: null };
+  const from = slotMap().get(sid);
+  if (from != null) patch[`assign/s${from}`] = null;
+  if (state.selected === sid) state.selected = null;
+  await write(patch, '已刪除');
+}
+
+/* ---------- 報名表單 ---------- */
+function uniqueWeapons() {
+  const seen = new Map();
+  for (const x of flatSlots()) {
+    const key = canon(x.s.weapon);
+    if (key && !seen.has(key)) seen.set(key, { key, role: x.g.role, item: lookup(x.s.weapon), text: x.s.weapon });
+  }
+  return [...seen.values()];
+}
+
+function openSignup(mode, sid) {
+  if (!state.backend) return;
+  if (mode === 'self-new' && signup(mySid())) { mode = 'self-edit'; sid = mySid(); }
+  const su = sid ? signup(sid) : null;
+  state.dlg = { mode, sid, prefs: asList(su && su.prefs).slice(0, MAX_PREFS) };
+  $('#suTitle').textContent = { 'self-new': '📝 我要報名', 'self-edit': '✏️ 修改報名', 'admin-new': '➕ 新增卡片', 'admin-edit': '✎ 編輯卡片' }[mode];
+  $('#suName').value = su ? su.name : (mode === 'self-new' ? (store.get(LS_ME) || '') : '');
+  $('#suFill').checked = su ? !!su.fill : false;
+  $('#suNote').value = (su && su.note) || '';
+  $('#suWithdraw').hidden = mode !== 'self-edit';
+  $('#suSubmit').textContent = mode === 'self-new' ? '送出報名' : '儲存';
+  $('#suMsg').textContent = '';
+  renderPicker();
+  $('#signupDlg').showModal();
+  if (!$('#suName').value) $('#suName').focus();
+}
+
+function renderPicker() {
+  const box = $('#suPicker');
+  const sel = state.dlg.prefs;
+  const full = sel.length >= MAX_PREFS;
+  $('#suCount').textContent = `(已選 ${sel.length}/${MAX_PREFS})`;
+  const btn = (key, role, content, title) => {
+    const on = sel.includes(key);
+    return h('button', {
+      type: 'button', class: `pick role-${role}${on ? ' on' : ''}`, 'aria-pressed': String(on), title,
+      disabled: !on && full ? true : null,
+      onclick: () => {
+        const i = sel.indexOf(key);
+        if (i >= 0) sel.splice(i, 1); else if (sel.length < MAX_PREFS) sel.push(key);
+        renderPicker();
+      },
+    }, content);
+  };
+  const weapons = uniqueWeapons();
+  box.replaceChildren(...comp().map(g => {
+    const role = roleOf(g);
+    return h('div', { class: `pick-group role-${g.role}` },
+      h('div', { class: 'pick-head' }, h('i'), role.zh),
+      h('div', { class: 'pick-row' },
+        btn(`role:${g.role}`, g.role, [h('span', { class: 'pick-any' }, role.emoji), h('span', {}, `任何${role.zh}`)], `任何${role.zh}位置都可以`),
+        weapons.filter(w => w.role === g.role).map(w => btn(w.key, g.role, [
+          w.item && w.item.id ? iconImg(w.item.id, w.item.en, 64) : h('span', { class: 'pick-any' }, '⚔'),
+          h('span', {}, w.item ? w.item.en : w.text),
+        ], w.item ? w.item.zh : null))));
+  }));
+}
+
+async function submitSignup(e) {
+  e.preventDefault();
+  const B = state.backend;
+  const msg = $('#suMsg');
+  const name = $('#suName').value.trim();
+  const fill = $('#suFill').checked;
+  const note = $('#suNote').value.trim();
+  const prefs = state.dlg.prefs.slice(0, MAX_PREFS);
+  if (!name) { msg.textContent = '請輸入遊戲名字'; $('#suName').focus(); return; }
+  if (!prefs.length && !fill) { msg.textContent = '請至少選一個位置或職業,或勾選補位'; return; }
+  const btn = $('#suSubmit');
+  btn.disabled = true;
+  msg.textContent = '';
+  try {
+    const { mode } = state.dlg;
+    let sid = state.dlg.sid;
+    if (mode.startsWith('self')) {
+      sid = 'w_' + await B.ensureUser();
+      store.set(LS_ME, name);
+    } else if (mode === 'admin-new') {
+      sid = 'm_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    }
+    const patch = {};
+    if (signup(sid)) {
+      const body = { name, prefs: prefs.length ? prefs : null, fill, note: note || null, updatedAt: B.serverTime() };
+      for (const [k, v] of Object.entries(body)) patch[`signups/${sid}/${k}`] = v;
+    } else {
+      const rec = { name, fill, source: mode.startsWith('admin') ? 'manual' : 'web', createdAt: B.serverTime() };
+      if (prefs.length) rec.prefs = prefs;
+      if (note) rec.note = note;
+      patch[`signups/${sid}`] = rec;
+    }
+    await B.update(patch);
+    $('#signupDlg').close();
+    toast(mode === 'self-new' ? '✅ 報名成功!隊長排位後這裡會即時更新' : '已儲存');
+    if (mode.startsWith('self')) { state.query = name; $('#search').value = name; }
+    render();
+  } catch (err) {
+    console.error(err);
+    msg.textContent = '送出失敗:' + errMsg(err);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function withdraw() {
+  const sid = mySid();
+  if (!signup(sid) || !confirm('確定要取消報名嗎?')) return;
+  if ($('#signupDlg').open) $('#signupDlg').close();
+  await write({ [`signups/${sid}`]: null }, '已取消報名');
+}
+
+/* ================= 搜尋 / 複製 ================= */
 function applySearch() {
   const q = norm(state.query);
-  const board = $('#board');
   const out = $('#searchResult');
-  const d = view();
-  board.querySelectorAll('.slot').forEach(el => {
-    el.classList.toggle('is-match', !!q && !state.editing && el.dataset.player.includes(q));
-  });
-  board.classList.toggle('searching', !!q && !state.editing);
+  document.querySelectorAll('.slot, .card').forEach(el => el.classList.toggle('is-match', !!q && (el.dataset.player || '').includes(q)));
   out.replaceChildren();
-  if (!q || !d || state.editing) return;
-  const hits = allSlots(d).map((x, i) => ({ ...x, i })).filter(x => norm(x.s.player).includes(q));
-  if (!hits.length) { out.textContent = '名單上還沒有這個名字'; return; }
-  out.append('你在 ');
-  for (const x of hits.slice(0, 4)) {
-    const w = lookup(x.s.weapon);
-    out.append(h('button', { type: 'button', onclick: () => scrollToSlot(x.i) }, `#${pad2(x.i + 1)} ${w ? w.en : x.s.weapon}(${x.g.name || roleOf(x.g).zh})`));
+  if (!q) return;
+  const hits = flatSlots().filter(x => { const su = signup(sidAt(x.idx)); return su && norm(su.name).includes(q); });
+  if (hits.length) {
+    out.append('你在 ');
+    for (const x of hits.slice(0, 4)) {
+      const w = lookup(x.s.weapon);
+      out.append(h('button', { type: 'button', onclick: () => scrollToEl(`.slot[data-idx="${x.idx}"]`) }, `#${pad2(x.idx + 1)} ${w ? w.en : x.s.weapon}(${roleOf(x.g).zh})`));
+    }
+    return;
   }
+  const waiting = sortedSignups().find(([, su]) => norm(su.name).includes(q));
+  if (waiting) {
+    out.append(h('button', { type: 'button', onclick: () => scrollToEl(`.card[data-sid="${waiting[0]}"]`) }, '已報名,等待隊長排位'));
+    return;
+  }
+  out.textContent = '名單上還沒有這個名字';
 }
 
-function scrollToSlot(i) {
-  const el = document.querySelector(`.slot[data-idx="${i}"]`);
+function scrollToEl(sel) {
+  const el = document.querySelector(sel);
   if (!el) return;
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   el.classList.remove('flash');
@@ -441,27 +788,16 @@ function scrollToSlot(i) {
   el.classList.add('flash');
 }
 
-/* ================= Discord 格式 ================= */
-function toDiscord(d) {
-  return d.groups.map(g => g.slots.map(s => {
-    const name = String(s.player || '').trim();
-    return `${s.weapon}${s.note ? ` (${s.note})` : ''} - @${name}`;
+function toDiscord() {
+  const slots = flatSlots();
+  return comp().map((g, gi) => slots.filter(x => x.gi === gi).map(x => {
+    const su = signup(sidAt(x.idx));
+    return `${x.s.weapon}${x.s.note ? ` (${x.s.note})` : ''} - @${su ? su.name : ''}`;
   }).join('\n')).join('\n\n');
 }
 
-function parsePaste(text) {
-  return text.split(/\r?\n/).map(l => l.trim()).filter(Boolean).map(line => {
-    const m = line.match(/^(.*?)\s+[-–—]\s*(.*)$/);
-    const right = m ? m[2] : line;
-    return right.replace(/^@+/, '').trim();
-  });
-}
-
 async function copyText(text) {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
+  try { await navigator.clipboard.writeText(text); return true; } catch {
     const ta = h('textarea', { style: 'position:fixed;left:-9999px;opacity:0' });
     ta.value = text;
     document.body.append(ta);
@@ -473,267 +809,139 @@ async function copyText(text) {
   }
 }
 
-/* ================= GitHub API(隊長編輯用) ================= */
-function b64encode(str) {
-  const bytes = new TextEncoder().encode(str);
-  let bin = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(bin);
-}
-function b64decode(b64) {
-  const bin = atob(String(b64).replace(/\s/g, ''));
-  return new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)));
-}
-
-async function gh(path, opts = {}, token = store.get(LS_TOKEN)) {
-  const res = await fetch(`https://api.github.com${path}`, {
-    cache: 'no-store',
-    ...opts,
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${token}`,
-      ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
-    },
-  });
-  if (!res.ok) {
-    const err = new Error(`GitHub API ${res.status}`);
-    err.status = res.status;
-    try { err.detail = (await res.json()).message; } catch { /* ignore */ }
-    throw err;
-  }
-  return res.status === 204 ? null : res.json();
-}
-
-const contentsPath = () => `/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${CONFIG.file}`;
-
-async function ghGetFile() {
-  const j = await gh(`${contentsPath()}?ref=${CONFIG.branch}`);
-  return { sha: j.sha, data: JSON.parse(b64decode(j.content)) };
-}
-
-function explainError(e) {
-  if (e.status === 401) return '權杖無效或已過期,請重新登入';
-  if (e.status === 403 || e.status === 404) return '權杖沒有這個 repo 的寫入權限(Contents 要設 Read and write)';
-  if (e.status === 409) return '剛好有人同時儲存,請再按一次儲存';
-  if (e.status === 422) return `GitHub 拒絕這次寫入:${e.detail || '格式錯誤'}`;
-  if (e.status) return `GitHub 錯誤 ${e.status}:${e.detail || ''}`;
-  return '網路錯誤,請稍後再試';
-}
-
-/* ================= 編輯流程 ================= */
-function openLogin(msg = '') {
-  $('#loginMsg').textContent = msg;
-  $('#loginDlg').showModal();
-  $('#tokenInput').focus();
-}
-
-async function submitLogin(e) {
-  e.preventDefault();
-  const token = $('#tokenInput').value.trim();
-  const msg = $('#loginMsg');
-  if (!token) { msg.textContent = '請貼上權杖'; return; }
-  const btn = $('#loginSubmit');
-  btn.disabled = true;
-  msg.textContent = '驗證中…';
-  try {
-    await gh(`/repos/${CONFIG.owner}/${CONFIG.repo}`, {}, token);
-    store.set(LS_TOKEN, token);
-    $('#tokenInput').value = '';
-    $('#loginDlg').close();
-    updateEditBtn();
-    await startEdit();
-  } catch (err) {
-    msg.textContent = explainError(err);
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-function updateEditBtn() {
-  $('#editBtn').textContent = store.get(LS_TOKEN) ? '✏️ 編輯名單' : '🔒 隊長編輯';
-}
-
-async function startEdit() {
-  if (!state.data) return;
-  if (!store.get(LS_TOKEN)) { openLogin(); return; }
-  const btn = $('#editBtn');
-  btn.disabled = true;
-  let base = state.data;
-  try {
-    base = (await ghGetFile()).data; // 直接從 GitHub 拿最新版,不等 Pages 發布
-  } catch (e) {
-    if (e.status === 401) { store.del(LS_TOKEN); updateEditBtn(); btn.disabled = false; openLogin('權杖無效或已過期,請重新貼上'); return; }
-  }
-  btn.disabled = false;
-  if ((state.data.rev || 0) > (base.rev || 0)) base = state.data;
-  state.draft = structuredClone(base);
-  state.baseRev = base.rev || 0;
-  state.editing = true;
+/* ================= 登入 / 資料連線 ================= */
+let adminUnsub = null;
+function onAuthChanged(user) {
+  state.user = user ? { uid: user.uid, isAnonymous: !!user.isAnonymous } : null;
+  if (adminUnsub) { adminUnsub(); adminUnsub = null; }
+  state.isAdmin = false;
   state.editComp = false;
-  state.dirty = false;
-  state.remoteWhileEditing = null;
-  $('#compToggle').checked = false;
-  document.body.classList.add('editing');
-  $('#editbar').hidden = false;
-  $('#editBtn').hidden = true;
-  const ev = state.draft.event || (state.draft.event = {});
-  $('#evTitle').value = ev.title || '';
-  $('#evTime').value = ev.time || '';
-  $('#evNote').value = ev.note || '';
-  $('#eventEdit').hidden = false;
+  state.editEvent = false;
+  state.selected = null;
+  if (user && !user.isAnonymous) {
+    adminUnsub = state.backend.watch(`admins/${user.uid}`, v => {
+      const was = state.isAdmin;
+      state.isAdmin = v === true;
+      if (state.isAdmin) {
+        if ($('#adminDlg').open) $('#adminDlg').close();
+        if (!was) toast('👑 已進入隊長模式');
+        seedConfig();
+      } else {
+        $('#uidText').textContent = user.uid;
+        if (!$('#adminDlg').open) $('#adminDlg').showModal();
+      }
+      state.prevSlotSids = null;
+      render();
+    }, () => { state.isAdmin = false; render(); });
+  }
   render();
-  const first = document.querySelector('.slot-player input');
-  if (first && window.matchMedia('(hover: hover)').matches) first.focus({ preventScroll: true });
 }
 
-function exitEdit() {
-  state.editing = false;
-  state.draft = null;
-  state.dirty = false;
-  document.body.classList.remove('editing');
-  $('#editbar').hidden = true;
-  $('#eventEdit').hidden = true;
-  $('#editBtn').hidden = false;
-  render();
-  const r = state.remoteWhileEditing;
-  state.remoteWhileEditing = null;
-  if (r) applyRemote(r);
-}
-
-async function save() {
-  const btn = $('#saveBtn');
-  btn.disabled = true;
-  btn.textContent = '儲存中…';
-  try {
-    const latest = await ghGetFile();
-    const latestRev = latest.data.rev || 0;
-    if (latestRev !== state.baseRev &&
-        !confirm('你編輯的這段時間,名單已經被其他人更新過。\n確定要用你的版本覆蓋嗎?')) return;
-    const draft = structuredClone(state.draft);
-    for (const g of draft.groups) for (const s of g.slots) {
-      s.player = String(s.player || '').trim();
-      s.weapon = String(s.weapon || '').trim();
-      s.note = String(s.note || '').trim();
-    }
-    delete draft.updatedBy;
-    const next = { ...draft, rev: latestRev + 1, updatedAt: new Date().toISOString() };
-    const filled = allSlots(next).filter(x => isFilled(x.s)).length;
-    await gh(contentsPath(), {
-      method: 'PUT',
-      body: JSON.stringify({
-        message: `roster: rev ${next.rev} (${filled}/${allSlots(next).length})`,
-        content: b64encode(JSON.stringify(next, null, 2) + '\n'),
-        sha: latest.sha,
-        branch: CONFIG.branch,
-        author: CONFIG.identity,
-        committer: CONFIG.identity,
-      }),
-    });
-    store.set(LS_PENDING, JSON.stringify({ rev: next.rev, data: next, at: Date.now() }));
-    state.pending = next.rev;
-    const changed = diffSlots(state.data, next);
-    state.data = next;
-    state.remoteWhileEditing = null;
-    exitEdit();
-    render(changed);
-    toast('💾 已儲存!約 1 分鐘內所有人的頁面會自動更新', 4500);
-    schedulePoll();
-  } catch (e) {
-    if (e.status === 401) { store.del(LS_TOKEN); updateEditBtn(); openLogin('權杖無效或已過期,請重新貼上(你的修改還在)'); }
-    else toast('⚠ ' + explainError(e), 6000);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '💾 儲存並同步';
+async function seedConfig() {
+  if (state.isAdmin && state.loaded.has('config') && state.config == null) {
+    await write({ config: DEFAULT_CONFIG }, '已建立預設配置');
   }
 }
 
-function applyPaste(e) {
-  e.preventDefault();
-  const names = parsePaste($('#pasteInput').value);
-  const slots = allSlots(state.draft);
-  if (!names.length) { $('#pasteMsg').textContent = '沒有讀到任何內容'; return; }
-  slots.forEach((x, i) => { if (i < names.length) x.s.player = names[i]; });
-  state.dirty = true;
-  $('#pasteDlg').close();
-  render();
-  const n = Math.min(names.length, slots.length);
-  if (names.length !== slots.length) toast(`⚠ 貼上 ${names.length} 行,位置有 ${slots.length} 個 — 已照順序填入前 ${n} 個,請檢查`, 6000);
-  else toast(`📥 已填入 ${names.filter(Boolean).length} 個名字,確認後按「儲存並同步」`, 4500);
+async function captainLogin() {
+  try {
+    await state.backend.captainSignIn();
+    onAuthChanged(state.backend.currentUser());
+  } catch (e) {
+    if (/popup-closed|cancelled-popup/.test(e.code || '')) return;
+    console.error(e);
+    toast('⚠ 登入失敗:' + errMsg(e), 6000);
+  }
 }
 
-/* ================= 綁定事件 ================= */
-function bindUI() {
-  $('.repo-name').textContent = CONFIG.repo;
-  updateEditBtn();
+async function logout() {
+  await state.backend.signOut();
+  onAuthChanged(null);
+  toast('已登出');
+}
 
-  const search = $('#search');
-  search.addEventListener('input', () => {
-    state.query = search.value;
-    store.set(LS_ME, search.value.trim());
-    applySearch();
-  });
-  search.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { const b = $('#searchResult button'); if (b) b.click(); }
-  });
-
-  $('#copyBtn').addEventListener('click', async () => {
-    const d = view();
-    if (!d) return;
-    toast(await copyText(toDiscord(d)) ? '📋 已複製,直接貼到 Discord 就好' : '⚠ 複製失敗,請手動複製');
-  });
-
-  $('#editBtn').addEventListener('click', startEdit);
-  $('#saveBtn').addEventListener('click', save);
-  $('#cancelBtn').addEventListener('click', () => {
-    if (state.dirty && !confirm('放棄這次的修改?')) return;
-    exitEdit();
-  });
-  $('#logoutBtn').addEventListener('click', () => {
-    if (state.dirty && !confirm('登出會放棄這次的修改,確定嗎?')) return;
-    store.del(LS_TOKEN);
-    updateEditBtn();
-    exitEdit();
-    toast('已登出,這台電腦不再保存權杖');
-  });
-  $('#clearBtn').addEventListener('click', () => {
-    if (!confirm('清空全部名字?(還沒按儲存前,按「取消」都能復原)')) return;
-    allSlots(state.draft).forEach(x => { x.s.player = ''; });
-    state.dirty = true;
+function connect(B) {
+  state.backend = B;
+  B.watchConnected(c => { state.connected = c; renderLive(); });
+  B.watch('config', v => {
+    state.config = v;
+    state.loaded.add('config');
+    seedConfig();
     render();
   });
-  $('#compToggle').addEventListener('change', e => { state.editComp = e.target.checked; render(); });
-  $('#pasteBtn').addEventListener('click', () => {
-    $('#pasteMsg').textContent = '';
-    $('#pasteInput').value = '';
-    $('#pasteInput').placeholder = toDiscord(state.draft);
-    $('#pasteDlg').showModal();
-    $('#pasteInput').focus();
+  B.watch('assign', v => {
+    state.assign = v || {};
+    state.loaded.add('assign');
+    render();
+  });
+  B.watch('signups', v => {
+    const next = v || {};
+    if (state.knownSids && state.isAdmin) {
+      for (const [sid, su] of Object.entries(next)) if (!state.knownSids.has(sid) && su && su.name) toast(`🆕 ${su.name} 報名了`);
+    }
+    state.knownSids = new Set(Object.keys(next));
+    state.signups = next;
+    state.loaded.add('signups');
+    if (state.selected && !next[state.selected]) state.selected = null;
+    render();
+  });
+  B.onAuth(onAuthChanged);
+}
+
+/* ================= 事件綁定 ================= */
+function bindUI() {
+  const search = $('#search');
+  search.addEventListener('input', () => { state.query = search.value; store.set(LS_ME, search.value.trim()); applySearch(); });
+  search.addEventListener('keydown', e => { if (e.key === 'Enter') { const b = $('#searchResult button'); if (b) b.click(); } });
+
+  $('#signupBtn').addEventListener('click', () => openSignup('self-new'));
+  $('#copyBtn').addEventListener('click', async () => toast(await copyText(toDiscord()) ? '📋 已複製,直接貼到 Discord 就好' : '⚠ 複製失敗'));
+  $('#loginBtn').addEventListener('click', captainLogin);
+  $('#logoutBtn').addEventListener('click', logout);
+  $('#adminDlgLogout').addEventListener('click', () => { $('#adminDlg').close(); logout(); });
+  $('#uidCopy').addEventListener('click', async () => toast(await copyText($('#uidText').textContent) ? 'UID 已複製' : '⚠ 複製失敗'));
+
+  $('#evToggle').addEventListener('click', () => { state.editEvent = !state.editEvent; render(); });
+  $('#compToggle').addEventListener('click', () => { state.editComp = !state.editComp; state.prevSlotSids = null; render(); });
+  $('#addCardBtn').addEventListener('click', () => openSignup('admin-new'));
+  $('#clearAssignBtn').addEventListener('click', () => {
+    if (confirm('清空全部位置的排位?(報名卡片會留著)')) write({ assign: null }, '已清空排位');
+  });
+  $('#resetBtn').addEventListener('click', () => {
+    if (confirm('開新一場:清空「所有報名」和「排位」,確定嗎?\n(隊伍配置和活動資訊會保留)')) write({ signups: null, assign: null }, '已開新一場');
   });
 
-  for (const [id, key] of [['#evTitle', 'title'], ['#evTime', 'time'], ['#evNote', 'note']]) {
-    $(id).addEventListener('input', e => {
-      state.draft.event[key] = e.target.value;
-      state.dirty = true;
-      if (key === 'title') $('#title').textContent = e.target.value || '隊伍名單';
+  const saveEvent = debounce((key, val) => write({ [`config/event/${key}`]: val }), 600);
+  for (const inp of document.querySelectorAll('#eventEdit input')) {
+    inp.addEventListener('input', () => {
+      if (inp.dataset.key === 'title') $('#title').textContent = inp.value || '隊伍名單';
+      saveEvent(inp.dataset.key, inp.value);
     });
   }
 
-  $('#loginForm').addEventListener('submit', submitLogin);
-  $('#pasteForm').addEventListener('submit', applyPaste);
+  bindPoolDrop();
+  $('#signupForm').addEventListener('submit', submitSignup);
+  $('#suWithdraw').addEventListener('click', withdraw);
   document.querySelectorAll('dialog [data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
-
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
-  window.addEventListener('beforeunload', e => {
-    if (state.editing && state.dirty) { e.preventDefault(); e.returnValue = ''; }
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && state.selected && !document.querySelector('dialog[open]')) select(null);
   });
-  setInterval(renderLive, 30000);
+  setInterval(() => { if (!state.dragging && !boardHasFocus()) renderPool(); }, 60000);
 }
 
-function init() {
+async function init() {
   bindUI();
   const me = store.get(LS_ME);
   if (me) { state.query = me; $('#search').value = me; }
-  poll();
+  const params = new URLSearchParams(location.search);
+  try {
+    if (params.has('mock')) connect((await import('./backend-mock.js')).createBackend());
+    else if (FIREBASE_CONFIG) connect((await import('./backend-firebase.js')).createBackend(FIREBASE_CONFIG));
+  } catch (e) {
+    console.error(e);
+    toast('⚠ 資料庫連線失敗:' + errMsg(e), 8000);
+  }
+  if (!state.backend) { state.config = null; render(); }
 }
 
 init();

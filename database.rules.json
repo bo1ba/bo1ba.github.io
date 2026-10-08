@@ -1,0 +1,39 @@
+{
+  "rules": {
+    "admins": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid"
+      }
+    },
+    "config": {
+      ".read": true,
+      ".write": "auth != null && root.child('admins/' + auth.uid).val() === true"
+    },
+    "assign": {
+      ".read": true,
+      ".write": "auth != null && root.child('admins/' + auth.uid).val() === true",
+      "$slot": {
+        ".validate": "newData.isString() && newData.val().length <= 64"
+      }
+    },
+    "signups": {
+      ".read": true,
+      ".write": "auth != null && root.child('admins/' + auth.uid).val() === true",
+      "$sid": {
+        ".write": "auth != null && $sid === 'w_' + auth.uid",
+        ".validate": "newData.hasChildren(['name', 'source', 'createdAt'])",
+        "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 32" },
+        "source": { ".validate": "newData.val() === 'web' || (newData.isString() && root.child('admins/' + auth.uid).val() === true)" },
+        "createdAt": { ".validate": "newData.isNumber() && newData.val() <= now" },
+        "updatedAt": { ".validate": "newData.isNumber() && newData.val() <= now" },
+        "fill": { ".validate": "newData.isBoolean()" },
+        "note": { ".validate": "newData.isString() && newData.val().length <= 80" },
+        "prefs": {
+          "$i": { ".validate": "($i === '0' || $i === '1' || $i === '2') && newData.isString() && newData.val().length <= 40" }
+        },
+        "discordId": { ".validate": "newData.isString() && root.child('admins/' + auth.uid).val() === true" },
+        "$other": { ".validate": false }
+      }
+    }
+  }
+}

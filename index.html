@@ -4,10 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>隊伍名單 · Albion</title>
-  <meta name="description" content="Albion Online 20 人隊伍配置與名單,自動同步,打開就是最新版。">
+  <meta name="description" content="Albion Online 20 人隊伍:線上報名、隊長排位、即時同步。">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="⚔ 20 人隊伍名單">
-  <meta property="og:description" content="Albion Online 隊伍配置與名單 · 自動同步,打開就是最新版">
+  <meta property="og:title" content="⚔ 20 人隊伍 · 報名與名單">
+  <meta property="og:description" content="線上報名(網站或 Discord)、隊長排位,名單即時同步">
   <meta property="og:image" content="https://render.albiononline.com/v1/item/T8_2H_MACE.png?size=217">
   <meta name="theme-color" content="#e0b866">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%94%EF%B8%8F%3C/text%3E%3C/svg%3E">
@@ -19,16 +19,17 @@
 <body>
   <div class="bg-glow" aria-hidden="true"></div>
 
-  <div class="editbar" id="editbar" hidden>
+  <div class="adminbar" id="adminbar" hidden>
     <div class="wrap">
-      <span class="eb-label">✏️ 編輯模式</span>
-      <label class="eb-toggle"><input type="checkbox" id="compToggle"> 也編輯武器配置</label>
+      <span class="ab-label">👑 隊長模式</span>
+      <span class="ab-hint">拖曳卡片到位置,或點卡片再點位置</span>
       <span class="spacer"></span>
-      <button class="btn" id="pasteBtn" type="button">📥 貼上 Discord 名單</button>
-      <button class="btn danger" id="clearBtn" type="button">🧹 清空名字</button>
-      <button class="btn ghost" id="logoutBtn" type="button" title="清除這台電腦存的權杖">登出</button>
-      <button class="btn ghost" id="cancelBtn" type="button">取消</button>
-      <button class="btn primary" id="saveBtn" type="button">💾 儲存並同步</button>
+      <button class="btn" id="evToggle" type="button" aria-pressed="false">✏️ 活動資訊</button>
+      <button class="btn" id="compToggle" type="button" aria-pressed="false">⚙ 編輯配置</button>
+      <button class="btn" id="addCardBtn" type="button">➕ 新增卡片</button>
+      <button class="btn danger" id="clearAssignBtn" type="button">🧹 清空排位</button>
+      <button class="btn danger" id="resetBtn" type="button">🗑 開新一場</button>
+      <button class="btn ghost" id="logoutBtn" type="button">登出</button>
     </div>
   </div>
 
@@ -38,19 +39,19 @@
       <h1 id="title">隊伍名單</h1>
       <div class="event-meta" id="eventMeta" hidden></div>
       <div class="event-edit" id="eventEdit" hidden>
-        <label><span>標題</span><input class="inp" id="evTitle" maxlength="60"></label>
-        <label><span>時間</span><input class="inp" id="evTime" maxlength="60" placeholder="例:10/12(日)21:00 集合"></label>
-        <label><span>公告</span><input class="inp" id="evNote" maxlength="120" placeholder="例:語音 #zvz-1,全員 T8 裝備"></label>
+        <label><span>標題</span><input class="inp" id="evTitle" maxlength="60" data-key="title"></label>
+        <label><span>時間</span><input class="inp" id="evTime" maxlength="60" data-key="time" placeholder="例:10/12(日)21:00 集合"></label>
+        <label><span>公告</span><input class="inp" id="evNote" maxlength="120" data-key="note" placeholder="例:語音 #zvz-1,全員 T8 裝備"></label>
       </div>
       <div class="overview">
         <div class="fill">
           <span class="fill-num" id="filledNum">0</span>
           <span class="fill-of">/ <span id="totalNum">20</span></span>
-          <span class="fill-label">已就位</span>
+          <span class="fill-label">已排定</span>
         </div>
         <div class="segbar" id="segbar" aria-hidden="true"></div>
         <div class="legend" id="legend"></div>
-        <div class="live" id="live"><span class="dot"></span><span id="liveText">載入中…</span></div>
+        <div class="live" id="live"><span class="dot"></span><span id="liveText">連線中…</span></div>
       </div>
     </div>
   </header>
@@ -62,52 +63,64 @@
     </div>
     <div class="search-result" id="searchResult" aria-live="polite"></div>
     <span class="spacer"></span>
+    <button class="btn primary" id="signupBtn" type="button" disabled>📝 我要報名</button>
     <button class="btn" id="copyBtn" type="button">📋 複製 Discord 格式</button>
-    <button class="btn ghost" id="editBtn" type="button">🔒 隊長編輯</button>
+    <button class="btn ghost" id="loginBtn" type="button">👑 隊長登入</button>
   </div>
 
-  <main class="wrap board" id="board"><div class="loading">載入名單中…</div></main>
+  <div class="wrap"><div class="mine" id="mine" hidden></div></div>
 
-  <footer class="wrap foot">
-    名單存放在 GitHub · 頁面每 15 秒自動檢查更新,不用重新整理
-  </footer>
+  <div class="wrap layout" id="layout">
+    <main class="main-area"><div class="board" id="board"><div class="loading">載入名單中…</div></div></main>
+    <aside class="pool" id="pool" aria-label="報名名單"></aside>
+  </div>
 
+  <footer class="wrap foot">名單即時同步 · 網站或 Discord 都能報名,隊長排位後所有人立刻看到</footer>
+
+  <div class="selbar" id="selbar" hidden></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <dialog id="loginDlg">
-    <form id="loginForm">
-      <h2>🔒 隊長登入</h2>
-      <p class="dlg-sub">只有負責排名單的人需要登入,其他人打開網頁就會看到即時名單。</p>
-      <ol>
-        <li>開啟 <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub 建立權杖頁面</a>(Fine-grained token)</li>
-        <li>Repository access 選 <b>Only select repositories</b> → 勾 <b class="repo-name">albion-roster</b></li>
-        <li>Permissions → Repository permissions → <b>Contents</b> 設為 <b>Read and write</b></li>
-        <li>按 Generate token,把產生的權杖貼到下面</li>
-      </ol>
-      <input class="inp" id="tokenInput" type="password" placeholder="github_pat_…" autocomplete="off" spellcheck="false">
-      <p class="dlg-note">權杖只存在這台電腦的瀏覽器裡,只用來把名單寫進 GitHub。</p>
-      <p class="dlg-msg" id="loginMsg"></p>
+  <dialog id="signupDlg">
+    <form id="signupForm">
+      <h2 id="suTitle">📝 我要報名</h2>
+      <label class="field"><span>遊戲名字</span>
+        <input class="inp" id="suName" maxlength="32" autocomplete="off" spellcheck="false" placeholder="你的 Albion 角色名稱">
+      </label>
+      <div class="field">
+        <span>想打的位置或職業 <small id="suCount">(最多 3 個)</small></span>
+        <div class="picker" id="suPicker"></div>
+      </div>
+      <label class="check"><input type="checkbox" id="suFill"> 🪑 補位:沒排到想打的位置也可以,交給隊長安排</label>
+      <label class="field"><span>備註(選填)</span>
+        <input class="inp" id="suNote" maxlength="80" placeholder="例:IP 1400、會晚到 10 分鐘">
+      </label>
+      <p class="dlg-msg" id="suMsg"></p>
       <div class="dlg-actions">
-        <button class="btn ghost" type="button" data-close>取消</button>
-        <button class="btn primary" type="submit" id="loginSubmit">登入並開始編輯</button>
+        <button class="btn danger" type="button" id="suWithdraw" hidden>取消報名</button>
+        <span class="spacer"></span>
+        <button class="btn ghost" type="button" data-close>關閉</button>
+        <button class="btn primary" type="submit" id="suSubmit">送出報名</button>
       </div>
     </form>
   </dialog>
 
-  <dialog id="pasteDlg">
-    <form id="pasteForm">
-      <h2>📥 貼上 Discord 名單</h2>
-      <p class="dlg-sub">直接貼上 Discord 那份「武器 - @名字」清單,會照順序填進每個位置;也可以一行一個名字。</p>
-      <textarea class="inp" id="pasteInput" spellcheck="false"></textarea>
-      <p class="dlg-msg" id="pasteMsg"></p>
-      <div class="dlg-actions">
-        <button class="btn ghost" type="button" data-close>取消</button>
-        <button class="btn primary" type="submit">填入名字</button>
-      </div>
-    </form>
+  <dialog id="adminDlg">
+    <h2>👑 還不是隊長</h2>
+    <p class="dlg-sub">你已經用 Google 登入,但這個帳號還沒有隊長權限。第一次設定時,請到 Firebase 把下面這串 UID 加成隊長:</p>
+    <div class="uid-row"><code id="uidText"></code><button class="btn" type="button" id="uidCopy">複製</button></div>
+    <ol>
+      <li>Firebase 主控台 → <b>Realtime Database</b> → <b>資料</b>分頁</li>
+      <li>滑到最上面的根節點,按 <b>+</b>:名稱填 <code>admins</code></li>
+      <li>在 admins 底下再按 <b>+</b>:名稱貼上 UID,值填 <code>true</code>(類型選布林值),新增</li>
+      <li>回到這裡,頁面會自動切換成隊長模式</li>
+    </ol>
+    <div class="dlg-actions">
+      <button class="btn ghost" type="button" id="adminDlgLogout">登出</button>
+      <button class="btn primary" type="button" data-close>知道了</button>
+    </div>
   </dialog>
 
   <noscript><p class="wrap">這個頁面需要啟用 JavaScript 才能顯示名單。</p></noscript>
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

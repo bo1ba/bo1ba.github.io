@@ -165,24 +165,27 @@ h1 {
 .btn.ghost { background: transparent; }
 .btn.danger:hover { border-color: var(--bad); color: var(--bad); }
 
-/* ---------- edit bar ---------- */
-.editbar {
+/* ---------- admin bar ---------- */
+.adminbar {
   position: sticky; top: 0; z-index: 20;
   background: rgba(24, 19, 9, .92); backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(224, 184, 102, .4);
   box-shadow: 0 8px 30px rgba(0, 0, 0, .35);
 }
-.editbar .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 10px; padding-bottom: 10px; }
-.eb-label { font-weight: 900; color: var(--gold); }
-.eb-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; margin-left: 8px; }
-.eb-toggle input { accent-color: var(--gold); }
+.adminbar .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 10px; padding-bottom: 10px; }
+.ab-label { font-weight: 900; color: var(--gold); }
+.ab-hint { font-size: 13px; color: var(--muted); }
+.btn[aria-pressed="true"] { border-color: var(--gold); color: var(--gold); background: rgba(224, 184, 102, .12); }
+.btn.small { padding: 6px 11px; font-size: 13px; border-radius: 9px; }
 
 /* ---------- board ---------- */
-.board { display: grid; gap: 18px; grid-template-columns: 1fr; align-items: start; padding-bottom: 28px; }
+.board { display: grid; gap: 18px; grid-template-columns: 1fr; align-items: start; }
 .loading, .board-error { padding: 60px 0; text-align: center; color: var(--muted); grid-column: 1 / -1; }
 .board-error { color: var(--bad); }
 
-@media (min-width: 720px) {
+/* 依「名單區」本身寬度排版(隊長模式右邊多一欄報名池時會自動變窄) */
+.main-area { container: board / inline-size; min-width: 0; }
+@container board (min-width: 700px) {
   .board:not(.auto) { grid-template-columns: 1fr 1fr; grid-template-areas: "g0 g1" "g2 g1" "g3 g3"; }
   .board:not(.auto) .g0 { grid-area: g0; }
   .board:not(.auto) .g1 { grid-area: g1; align-self: stretch; }
@@ -190,7 +193,7 @@ h1 {
   .board:not(.auto) .g3 { grid-area: g3; }
   .board:not(.auto) .g3 .slots { grid-template-columns: 1fr 1fr; }
 }
-@media (min-width: 1180px) {
+@container board (min-width: 1120px) {
   .board:not(.auto) { grid-template-columns: 1fr 2fr 1fr 1fr; grid-template-areas: "g0 g1 g2 g3"; align-items: stretch; }
   .board:not(.auto) .g1 .slots { grid-template-columns: 1fr 1fr; }
   .board:not(.auto) .g3 .slots { grid-template-columns: 1fr; }
@@ -316,10 +319,8 @@ h1 {
 .p-at { color: var(--rc); font-weight: 700; }
 .p-name { font-weight: 700; font-size: 15.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-body.editing .slot-player { padding: 0; border: 0 !important; background: none !important; }
 
 /* search highlight & live flash */
-.board.searching .slot:not(.is-match) { opacity: .32; }
 .slot.is-match {
   border-color: var(--gold);
   box-shadow: 0 0 0 1px var(--gold), 0 0 26px rgba(224, 184, 102, .35);
@@ -375,6 +376,8 @@ dialog a { color: var(--gold); }
 textarea.inp { min-height: 280px; resize: vertical; font-family: ui-monospace, Consolas, "Cascadia Mono", monospace; font-size: 13px; line-height: 1.55; }
 
 @media (max-width: 719px) {
+  .ab-hint { display: none; }
+  .adminbar .btn { padding: 7px 9px; font-size: 12.5px; }
   .wrap { padding: 0 16px; }
   .hero { padding-top: 30px; }
   .kicker { letter-spacing: .14em; font-size: 10.5px; }
@@ -383,7 +386,6 @@ textarea.inp { min-height: 280px; resize: vertical; font-family: ui-monospace, C
   .event-edit { grid-template-columns: 1fr; }
   .toolbar .btn { flex: 1 1 auto; }
   .search { max-width: none; flex-basis: 100%; }
-  .editbar .btn { padding: 8px 10px; font-size: 13px; }
   .segbar { gap: 6px; }
   .seg-group { gap: 2px; }
 }
@@ -391,3 +393,156 @@ textarea.inp { min-height: 280px; resize: vertical; font-family: ui-monospace, C
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ================= 報名 / 排位 ================= */
+.layout { display: grid; gap: 22px; align-items: start; padding-bottom: 28px; }
+@media (min-width: 1100px) {
+  body.is-admin .layout { grid-template-columns: minmax(0, 1fr) 350px; }
+  body.is-admin .pool { position: sticky; top: 72px; max-height: calc(100vh - 88px); overflow: auto; }
+}
+
+/* 名單上的名字 */
+.mini { display: flex; align-items: center; gap: 7px; width: 100%; min-width: 0; }
+.mini .p-name { flex: 1; }
+.mini-x {
+  flex: none; width: 24px; height: 24px; border-radius: 7px; padding: 0;
+  border: 1px solid var(--line-2); background: rgba(0, 0, 0, .25); color: var(--muted);
+  font-size: 12px; cursor: pointer;
+}
+.mini-x:hover { color: var(--bad); border-color: var(--bad); }
+.src {
+  flex: none; padding: 0 6px; border-radius: 6px;
+  font-size: 10.5px; line-height: 18px; font-weight: 800; letter-spacing: .02em;
+}
+.src-discord { background: #5865f2; color: #fff; }
+.src-web { background: rgba(255, 255, 255, .1); color: #cfd5df; }
+.src-manual { background: rgba(224, 184, 102, .2); color: var(--gold); }
+
+/* 隊長模式:可點、可拖 */
+body.is-admin .slot { cursor: pointer; }
+body.is-admin .card, body.is-admin .mini { cursor: grab; }
+.slot.is-suggest {
+  border-color: color-mix(in srgb, var(--rc) 75%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--rc) 60%, transparent), 0 0 22px color-mix(in srgb, var(--rc) 30%, transparent);
+}
+.slot.drop-over, .pool.drop-over { outline: 2px dashed var(--gold); outline-offset: 2px; }
+.slot.is-selected, .card.is-selected { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold), 0 0 26px rgba(224, 184, 102, .35); }
+.card.is-match, .slot.is-match { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold), 0 0 26px rgba(224, 184, 102, .35); }
+
+/* 報名池 */
+.pool {
+  padding: 14px; border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(224, 184, 102, .06), var(--panel) 120px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
+}
+.pool-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+.pool-head h2 { margin: 0; font-size: 18px; font-weight: 900; letter-spacing: .04em; }
+.seg-filter { display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px; background: rgba(0, 0, 0, .25); border: 1px solid var(--line); }
+.seg-filter button {
+  border: 0; background: none; color: var(--muted); cursor: pointer;
+  padding: 4px 10px; border-radius: 7px; font-size: 13px; font-variant-numeric: tabular-nums;
+}
+.seg-filter button.on { background: var(--panel-hi); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-2); }
+.pool-head .btn { margin-left: auto; }
+.pool-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr)); }
+.pool-empty { grid-column: 1 / -1; padding: 26px 0; text-align: center; color: var(--faint); }
+.pool-hint { margin: 10px 2px 0; font-size: 12px; color: var(--faint); }
+
+.card {
+  display: grid; gap: 7px; padding: 10px 12px; min-width: 0;
+  border-radius: 12px; border: 1px solid var(--line);
+  background: rgba(255, 255, 255, .03);
+  transition: border-color .2s, box-shadow .2s, opacity .2s;
+}
+.card:hover { border-color: var(--line-2); }
+.card.is-assigned { opacity: .6; }
+.card.is-mine { border-style: dashed; border-color: rgba(224, 184, 102, .55); }
+.card-top { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.card-no { flex: none; min-width: 20px; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.card-name { flex: 1; min-width: 0; font-size: 15.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.you { flex: none; padding: 0 7px; border-radius: 999px; font-size: 11px; line-height: 18px; background: var(--gold); color: #1d1608; font-weight: 800; }
+.card-assigned { font-size: 12.5px; color: var(--muted); }
+.card-slot { color: var(--rc, var(--gold)); font-weight: 700; }
+.card-note { font-size: 12.5px; color: #cfd5df; overflow-wrap: anywhere; }
+.card-meta { display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; color: var(--faint); }
+.card-actions { display: inline-flex; gap: 4px; }
+.card-actions button {
+  width: 26px; height: 24px; padding: 0; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 12px;
+}
+.card-actions button:hover { border-color: var(--gold); color: var(--text); }
+
+.pchips { display: flex; flex-wrap: wrap; gap: 5px; }
+.pchip {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
+  padding: 1px 9px 1px 3px; border-radius: 999px; white-space: nowrap;
+  font-size: 12px; line-height: 22px; color: #dcd7cd;
+  background: rgba(255, 255, 255, .05); border: 1px solid var(--line);
+}
+.pchip img { width: 22px; height: 22px; margin: -1px 0; }
+.pchip span { overflow: hidden; text-overflow: ellipsis; }
+.pchip-role { padding-left: 9px; color: var(--rc); border-color: color-mix(in srgb, var(--rc) 40%, transparent); background: color-mix(in srgb, var(--rc) 10%, transparent); }
+.pchip-fill { padding-left: 9px; color: var(--gold); border-color: rgba(224, 184, 102, .4); background: rgba(224, 184, 102, .08); }
+
+/* 我的報名 */
+.mine {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  margin: -6px 0 18px; padding: 12px 16px; border-radius: 14px;
+  border: 1px solid rgba(224, 184, 102, .45);
+  background: linear-gradient(90deg, rgba(224, 184, 102, .14), rgba(224, 184, 102, .03));
+}
+.mine-main { display: grid; gap: 2px; }
+.mine-status { font-size: 13.5px; color: var(--muted); }
+.mine-status.ok { color: var(--ok); font-weight: 700; }
+.mine-actions { display: flex; gap: 8px; margin-left: auto; }
+
+/* 選取中的浮動列 */
+.selbar {
+  position: fixed; left: 50%; bottom: 18px; z-index: 40; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center;
+  width: max-content; max-width: calc(100vw - 32px);
+  padding: 10px 14px; border-radius: 14px;
+  background: rgba(24, 19, 9, .95); border: 1px solid var(--gold);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .55);
+}
+.sel-text b { color: var(--gold); }
+
+/* 報名表單 */
+#signupDlg { width: min(680px, calc(100vw - 32px)); max-height: calc(100vh - 40px); }
+.field { display: grid; gap: 6px; margin: 0 0 14px; font-size: 13px; color: var(--muted); }
+.field small { color: var(--faint); }
+.check { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 14px; font-size: 14px; cursor: pointer; }
+.check input { margin-top: 3px; accent-color: var(--gold); width: 16px; height: 16px; }
+.picker { display: grid; gap: 10px; }
+.pick-group { padding: 10px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, .02); }
+.pick-head { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; font-weight: 900; color: var(--text); font-size: 13.5px; }
+.pick-head i { width: 9px; height: 9px; border-radius: 3px; background: var(--rc); }
+.pick-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.pick {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 11px 4px 4px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--line-2); background: #0c111a; color: var(--text);
+  font-size: 13px;
+}
+.pick img { width: 30px; height: 30px; }
+.pick-any { width: 30px; height: 30px; display: grid; place-items: center; font-size: 16px; }
+.pick:hover:not(:disabled) { border-color: color-mix(in srgb, var(--rc) 60%, transparent); }
+.pick.on {
+  border-color: var(--rc); color: #fff;
+  background: color-mix(in srgb, var(--rc) 22%, #0c111a);
+  box-shadow: 0 0 0 1px var(--rc);
+}
+.pick:disabled { opacity: .38; cursor: not-allowed; }
+.uid-row { display: flex; gap: 8px; align-items: center; margin: 4px 0 12px; }
+.uid-row code, dialog code {
+  font-family: ui-monospace, Consolas, monospace; font-size: 13px;
+  padding: 2px 6px; border-radius: 6px; background: #0c111a; border: 1px solid var(--line);
+}
+.uid-row code { flex: 1; padding: 8px 10px; overflow-wrap: anywhere; }
+
+@media (max-width: 719px) {
+  .mine-actions { margin-left: 0; }
+  .pool-head .btn { margin-left: 0; }
+}
+body.has-sel .toast { bottom: 84px; }
