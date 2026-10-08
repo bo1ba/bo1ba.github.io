@@ -1,45 +1,47 @@
-import { FIREBASE_CONFIG } from './firebase-config.js';
+import { FIREBASE_CONFIG } from './firebase-config.js?v=3';
+import { LANGS, STRINGS, ITEM_NAMES, detectLang } from './i18n.js?v=3';
 
 /* ================= 基本資料 ================= */
 const LS_ME = 'roster.me';
 const LS_FILTER = 'roster.filter';
+const LS_LANG = 'roster.lang';
 const MAX_PREFS = 3;
 
 const ROLES = {
-  tank: { zh: '坦克', en: 'TANK', emoji: '🛡️', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4 5v6c0 5.2 3.4 9.7 8 11 4.6-1.3 8-5.8 8-11V5l-8-3z"/></svg>' },
-  dps: { zh: '輸出', en: 'DPS', emoji: '⚔️', svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" y1="19" x2="19" y2="13"/><line x1="16" y1="16" x2="20" y2="20"/><line x1="19" y1="21" x2="21" y2="19"/><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"/><line x1="5" y1="14" x2="9" y2="18"/><line x1="7" y1="17" x2="4" y2="20"/><line x1="3" y1="19" x2="5" y2="21"/></svg>' },
-  support: { zh: '輔助', en: 'SUPPORT', emoji: '✨', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z"/></svg>' },
-  healer: { zh: '治療', en: 'HEALER', emoji: '➕', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.5 3h5v6.5H21v5h-6.5V21h-5v-6.5H3v-5h6.5z"/></svg>' },
+  tank: { en: 'TANK', emoji: '🛡️', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4 5v6c0 5.2 3.4 9.7 8 11 4.6-1.3 8-5.8 8-11V5l-8-3z"/></svg>' },
+  dps: { en: 'DPS', emoji: '⚔️', svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" y1="19" x2="19" y2="13"/><line x1="16" y1="16" x2="20" y2="20"/><line x1="19" y1="21" x2="21" y2="19"/><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"/><line x1="5" y1="14" x2="9" y2="18"/><line x1="7" y1="17" x2="4" y2="20"/><line x1="3" y1="19" x2="5" y2="21"/></svg>' },
+  support: { en: 'SUPPORT', emoji: '✨', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8z"/></svg>' },
+  healer: { en: 'HEALER', emoji: '➕', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.5 3h5v6.5H21v5h-6.5V21h-5v-6.5H3v-5h6.5z"/></svg>' },
 };
 
-// 武器/裝備名稱 → Albion 道具 ID(圖示來自 render.albiononline.com)
+// 武器/裝備名稱 → Albion 道具 ID(圖示來自 render.albiononline.com);第 4 欄 = 自選類的翻譯 key
 const ITEMS = [
-  [['heavy mace'], 'T8_2H_MACE', 'Heavy Mace', '重型錘矛'],
-  [['incubus', 'incubus mace'], 'T8_MAIN_MACE_HELL', 'Incubus Mace', '夢魘錘矛'],
-  [['hammer'], 'T8_MAIN_HAMMER', 'Hammer', '鎚子'],
-  [['earthrune', 'earthrune staff'], 'T8_2H_SHAPESHIFTER_KEEPER', 'Earthrune Staff', '大地符文法杖'],
-  [['forge hammer', 'forge hammers'], 'T8_2H_DUALHAMMER_HELL', 'Forge Hammers', '鍛造鎚'],
-  [['melee'], null, 'Melee', '近戰(自選)'],
-  [['lightcaller'], 'T8_2H_SHAPESHIFTER_AVALON', 'Lightcaller', '光之召喚者'],
-  [['dawnsong'], 'T8_2H_FIRE_RINGPAIR_AVALON', 'Dawnsong', '暮歌之戒'],
-  [['gloves'], 'T8_2H_KNUCKLES_SET1', 'Gloves', '拳套(自選)'],
-  [['shadowcaller'], 'T8_MAIN_CURSEDSTAFF_AVALON', 'Shadowcaller', '喚影者'],
-  [['rootbound', 'rootbound staff'], 'T8_2H_SHAPESHIFTER_SET2', 'Rootbound Staff', '林語者法杖'],
-  [['oath', 'oathkeeper', 'oathkeepers'], 'T8_2H_DUALMACE_AVALON', 'Oathkeepers', '守誓者'],
-  [['evensong'], 'T8_2H_ARCANE_RINGPAIR_AVALON', 'Evensong', '夜禱之戒'],
-  [['ga', 'great arcane', 'great arcane staff'], 'T8_2H_ARCANESTAFF', 'Great Arcane Staff', '祕術長杖'],
-  [['occu', 'occult', 'occult staff'], 'T8_2H_ARCANESTAFF_HELL', 'Occult Staff', '奧祕法杖'],
-  [['redemption', 'redemption staff'], 'T8_2H_HOLYSTAFF_UNDEAD', 'Redemption Staff', '贖罪法杖'],
-  [['fallen', 'fallen staff'], 'T8_2H_HOLYSTAFF_HELL', 'Fallen Staff', '墮落法杖'],
-  [['blight', 'blight staff'], 'T8_2H_NATURESTAFF_HELL', 'Blight Staff', '瘟疫法杖'],
-  [['royal armor'], 'T8_ARMOR_PLATE_ROYAL', 'Royal Armor', '皇家護甲'],
-  [['royal jacket'], 'T8_ARMOR_LEATHER_ROYAL', 'Royal Jacket', '皇家外套'],
-  [['royal robe'], 'T8_ARMOR_CLOTH_ROYAL', 'Royal Robe', '皇家長袍'],
-  [['pve weapon', 'pve'], null, 'PvE Weapon', 'PvE 武器'],
+  [['heavy mace'], 'T8_2H_MACE', 'Heavy Mace'],
+  [['incubus', 'incubus mace'], 'T8_MAIN_MACE_HELL', 'Incubus Mace'],
+  [['hammer'], 'T8_MAIN_HAMMER', 'Hammer'],
+  [['earthrune', 'earthrune staff'], 'T8_2H_SHAPESHIFTER_KEEPER', 'Earthrune Staff'],
+  [['forge hammer', 'forge hammers'], 'T8_2H_DUALHAMMER_HELL', 'Forge Hammers'],
+  [['melee'], null, 'Melee', 'w.melee'],
+  [['lightcaller'], 'T8_2H_SHAPESHIFTER_AVALON', 'Lightcaller'],
+  [['dawnsong'], 'T8_2H_FIRE_RINGPAIR_AVALON', 'Dawnsong'],
+  [['gloves'], 'T8_2H_KNUCKLES_SET1', 'Gloves', 'w.gloves'],
+  [['shadowcaller'], 'T8_MAIN_CURSEDSTAFF_AVALON', 'Shadowcaller'],
+  [['rootbound', 'rootbound staff'], 'T8_2H_SHAPESHIFTER_SET2', 'Rootbound Staff'],
+  [['oath', 'oathkeeper', 'oathkeepers'], 'T8_2H_DUALMACE_AVALON', 'Oathkeepers'],
+  [['evensong'], 'T8_2H_ARCANE_RINGPAIR_AVALON', 'Evensong'],
+  [['ga', 'great arcane', 'great arcane staff'], 'T8_2H_ARCANESTAFF', 'Great Arcane Staff'],
+  [['occu', 'occult', 'occult staff'], 'T8_2H_ARCANESTAFF_HELL', 'Occult Staff'],
+  [['redemption', 'redemption staff'], 'T8_2H_HOLYSTAFF_UNDEAD', 'Redemption Staff'],
+  [['fallen', 'fallen staff'], 'T8_2H_HOLYSTAFF_HELL', 'Fallen Staff'],
+  [['blight', 'blight staff'], 'T8_2H_NATURESTAFF_HELL', 'Blight Staff'],
+  [['royal armor'], 'T8_ARMOR_PLATE_ROYAL', 'Royal Armor'],
+  [['royal jacket'], 'T8_ARMOR_LEATHER_ROYAL', 'Royal Jacket'],
+  [['royal robe'], 'T8_ARMOR_CLOTH_ROYAL', 'Royal Robe'],
+  [['pve weapon', 'pve'], null, 'PvE Weapon', 'w.pve'],
 ];
 
 const DEFAULT_CONFIG = {
-  event: { title: '20 人隊伍名單', time: '', note: '' },
+  event: { title: '20-Man Roster', time: '', note: '' },
   comp: [
     { role: 'tank', slots: [
       { weapon: 'heavy mace', note: 'bring incubus' },
@@ -95,6 +97,28 @@ function h(tag, attrs, ...kids) {
   return el;
 }
 
+/* ---------- 多語系 ---------- */
+let LANG = 'zh';
+const langMeta = code => LANGS.find(l => l.code === code) || LANGS[0];
+function t(key, vars) {
+  let s = (STRINGS[LANG] || {})[key] ?? STRINGS.en[key] ?? STRINGS.zh[key] ?? key;
+  if (vars) s = s.replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? vars[k] : m));
+  return s;
+}
+// 模板裡的 {name} 換成 DOM 節點(例如粗體名字)
+function tNodes(key, nodes) {
+  return t(key).split(/(\{\w+\})/).filter(Boolean).map(part => {
+    const m = part.match(/^\{(\w+)\}$/);
+    return m && nodes[m[1]] != null ? nodes[m[1]] : part;
+  });
+}
+const loadedFonts = new Set();
+function loadFont(meta) {
+  if (!meta.font || loadedFonts.has(meta.font)) return;
+  loadedFonts.add(meta.font);
+  document.head.append(h('link', { rel: 'stylesheet', href: `https://fonts.googleapis.com/css2?family=${meta.font}:wght@400;500;700;900&display=swap` }));
+}
+
 // Firebase 會把 [a,b] 存成 {0:a,1:b},讀回來可能是陣列也可能是物件
 function asList(v) {
   if (Array.isArray(v)) return v.filter(x => x != null);
@@ -104,12 +128,15 @@ function asList(v) {
 
 const norm = s => String(s || '').toLowerCase().replace(/[’']/g, '').replace(/\s+/g, ' ').trim();
 const ITEM_INDEX = new Map();
-for (const [aliases, id, en, zh] of ITEMS) for (const a of aliases) ITEM_INDEX.set(a, { id, en, zh });
+for (const [aliases, id, en, key] of ITEMS) for (const a of aliases) ITEM_INDEX.set(a, { id, en, key });
 function lookup(name) {
   const n = norm(name);
   if (!n) return null;
   return ITEM_INDEX.get(n) || ITEM_INDEX.get(n.replace(/s$/, '')) || null;
 }
+// 道具的在地名稱(官方譯名;自選類用翻譯 key)
+const itemSub = it => (!it ? '' : it.key ? t(it.key) : ((ITEM_NAMES[it.id] || {})[LANG] || ''));
+const itemTitle = it => (it ? [it.en, itemSub(it)].filter(Boolean).join('・') : null);
 // 報名偏好用的武器代號,例如 'GA' → 'great arcane staff'
 const canon = weapon => { const it = lookup(weapon); return norm(it ? it.en : weapon); };
 
@@ -132,16 +159,20 @@ function iconImg(id, alt, size) {
   return img;
 }
 
-const roleOf = g => ROLES[g.role] || { zh: '隊伍', en: '', emoji: '•', svg: ROLES.support.svg };
+function roleOf(g) {
+  const r = ROLES[g && g.role];
+  const name = (g && g.name) || t(`role.${r ? g.role : 'other'}`);
+  return { name, en: r ? r.en : '', emoji: r ? r.emoji : '•', svg: (r || ROLES.support).svg };
+}
 const pad2 = n => String(n).padStart(2, '0');
 
 function rel(ts) {
   if (!ts) return '';
   const sec = (Date.now() - ts) / 1000;
-  if (sec < 60) return '剛剛';
-  if (sec < 3600) return `${Math.floor(sec / 60)} 分鐘前`;
-  if (sec < 86400) return `${Math.floor(sec / 3600)} 小時前`;
-  return new Date(ts).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+  if (sec < 60) return t('time.now');
+  if (sec < 3600) return t('time.min', { n: Math.floor(sec / 60) });
+  if (sec < 86400) return t('time.hour', { n: Math.floor(sec / 3600) });
+  return new Date(ts).toLocaleString(langMeta(LANG).locale, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 let toastTimer = null;
@@ -154,14 +185,14 @@ function toast(msg, ms = 3200) {
 }
 
 function debounce(fn, ms) {
-  let t = null;
-  return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+  let tm = null;
+  return (...a) => { clearTimeout(tm); tm = setTimeout(() => fn(...a), ms); };
 }
 
 function errMsg(e) {
   const s = String((e && (e.code || e.message)) || e);
-  if (/permission/i.test(s)) return '沒有權限(資料庫規則還沒設定,或你不是隊長)';
-  if (/network|offline/i.test(s)) return '網路連線有問題,請稍後再試';
+  if (/permission/i.test(s)) return t('err.perm');
+  if (/network|offline/i.test(s)) return t('err.net');
   return s;
 }
 
@@ -205,6 +236,7 @@ const mySid = () => (state.user ? 'w_' + state.user.uid : null);
 const sortedSignups = () => Object.entries(state.signups || {})
   .filter(([, su]) => su && su.name)
   .sort((a, b) => ((a[1].createdAt || 0) - (b[1].createdAt || 0)) || (a[0] < b[0] ? -1 : 1));
+const weaponLabel = s => { const w = lookup(s.weapon); return w ? w.en : s.weapon; };
 
 function matchesPref(su, x) {
   if (!su) return false;
@@ -212,6 +244,17 @@ function matchesPref(su, x) {
 }
 
 /* ================= 畫面 ================= */
+function applyStatic() {
+  const meta = langMeta(LANG);
+  document.documentElement.lang = meta.html;
+  loadFont(meta);
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+  document.querySelectorAll('[data-i18n-label]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nLabel)); });
+  document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); }); // 內建固定字串
+  $('#langName').textContent = meta.native;
+}
+
 function render() {
   renderHeader();
   renderOverview();
@@ -229,7 +272,7 @@ function flushStale() { if (state.boardStale && !state.dragging && !boardHasFocu
 
 function renderHeader() {
   const ev = cfg().event || {};
-  const title = ev.title || '隊伍名單';
+  const title = ev.title || t('title.default');
   $('#title').textContent = title;
   document.title = `${title} · Albion`;
   const meta = $('#eventMeta');
@@ -252,35 +295,33 @@ function renderOverview() {
   $('#totalNum').textContent = slots.length;
   $('.fill').classList.toggle('full', slots.length > 0 && filled === slots.length);
 
-  const bar = $('#segbar');
-  bar.replaceChildren(...groups.map((g, gi) => {
+  $('#segbar').replaceChildren(...groups.map((g, gi) => {
     const grp = h('div', { class: `seg-group role-${g.role || 'other'}`, style: `flex:${g.slots.length} 1 0` });
     for (const x of slots.filter(y => y.gi === gi)) {
       const su = signup(sidAt(x.idx));
-      const w = lookup(x.s.weapon);
-      grp.append(h('div', { class: 'seg' + (su ? ' on' : ''), title: `#${pad2(x.idx + 1)} ${w ? w.en : x.s.weapon} — ${su ? su.name : '空缺'}` }));
+      grp.append(h('div', { class: 'seg' + (su ? ' on' : ''), title: `#${pad2(x.idx + 1)} ${weaponLabel(x.s)} — ${su ? su.name : t('slot.empty')}` }));
     }
     return grp;
   }));
   $('#legend').replaceChildren(...groups.map((g, gi) => {
     const mine = slots.filter(x => x.gi === gi);
     const n = mine.filter(x => sidAt(x.idx)).length;
-    return h('span', { class: `role-${g.role || 'other'}` }, h('i'), g.name || roleOf(g).zh, ' ', h('b', {}, `${n}/${mine.length}`));
+    return h('span', { class: `role-${g.role || 'other'}` }, h('i'), roleOf(g).name, ' ', h('b', {}, `${n}/${mine.length}`));
   }));
 }
 
 function renderLive() {
   const live = $('#live'), txt = $('#liveText');
   live.classList.remove('pending', 'error');
-  if (!state.backend) { live.classList.add('error'); txt.textContent = '尚未連接資料庫'; return; }
-  if (!state.connected) { live.classList.add('pending'); txt.textContent = '連線中…'; return; }
-  txt.textContent = `即時同步中 · ${sortedSignups().length} 人報名`;
+  if (!state.backend) { live.classList.add('error'); txt.textContent = t('live.noDb'); return; }
+  if (!state.connected) { live.classList.add('pending'); txt.textContent = t('live.connecting'); return; }
+  txt.textContent = t('live.ok', { n: sortedSignups().length });
 }
 
 function renderToolbar() {
   const btn = $('#signupBtn');
   btn.disabled = !state.backend || !state.loaded.has('signups');
-  btn.textContent = signup(mySid()) ? '✏️ 修改報名' : '📝 我要報名';
+  btn.textContent = signup(mySid()) ? t('btn.editSignup') : t('btn.signup');
   $('#loginBtn').hidden = state.isAdmin || !state.backend;
 }
 
@@ -293,21 +334,22 @@ function renderAdminBar() {
 }
 
 function srcBadge(source) {
-  if (source === 'discord') return h('span', { class: 'src src-discord', title: '從 Discord 報名' }, 'DC');
-  if (source === 'manual') return h('span', { class: 'src src-manual', title: '隊長新增' }, '隊長');
-  return h('span', { class: 'src src-web', title: '從網站報名' }, '網站');
+  if (source === 'discord') return h('span', { class: 'src src-discord', title: t('src.discord') }, 'DC');
+  if (source === 'manual') return h('span', { class: 'src src-manual', title: t('src.manual') }, t('src.manualBadge'));
+  return h('span', { class: 'src src-web', title: t('src.web') }, t('src.webBadge'));
 }
 
 function prefChip(p) {
   if (p.startsWith('role:')) {
-    const r = ROLES[p.slice(5)];
-    return h('span', { class: `pchip pchip-role role-${p.slice(5)}` }, r ? `${r.emoji} ${r.zh}` : p);
+    const role = p.slice(5);
+    const r = roleOf({ role });
+    return h('span', { class: `pchip pchip-role role-${role}` }, `${r.emoji} ${r.name}`);
   }
   const it = lookup(p);
-  return h('span', { class: 'pchip', title: it ? it.zh : null },
+  return h('span', { class: 'pchip', title: itemTitle(it) },
     it && it.id ? iconImg(it.id, it.en, 44) : null, h('span', {}, it ? it.en : p));
 }
-const fillChip = () => h('span', { class: 'pchip pchip-fill' }, '🪑 補位');
+const fillChip = () => h('span', { class: 'pchip pchip-fill' }, t('fill'));
 
 /* ---------- 名單(20 個位置) ---------- */
 function renderBoard() {
@@ -325,9 +367,10 @@ function renderBoard() {
     const n = mine.filter(x => sidAt(x.idx)).length;
     const emblem = h('span', { class: 'role-emblem', 'aria-hidden': 'true' });
     emblem.innerHTML = role.svg; // 內建固定 SVG
+    const showEn = role.en && norm(role.en) !== norm(role.name);
     const head = h('header', { class: 'group-head' },
       emblem,
-      h('div', { class: 'group-title' }, g.name || role.zh, role.en ? h('small', {}, role.en) : null),
+      h('div', { class: 'group-title' }, role.name, showEn ? h('small', {}, role.en) : null),
       h('span', { class: 'group-count' + (n === mine.length ? ' full' : '') }, `${n}/${mine.length}`));
     const list = h('div', { class: 'slots' });
     for (const x of mine) list.append(renderSlot(x, !!prev && prev[x.idx] !== cur[x.idx]));
@@ -337,14 +380,14 @@ function renderBoard() {
 
 function slotIcon(s, idx) {
   const w = lookup(s.weapon);
-  return h('div', { class: 'slot-icon', title: w ? `${w.en}・${w.zh}` : (s.weapon || '') },
+  return h('div', { class: 'slot-icon', title: itemTitle(w) || s.weapon || '' },
     h('span', { class: 'slot-no' }, pad2(idx + 1)),
     w && w.id ? iconImg(w.id, w.en, 96) : h('span', { class: 'glyph' }, '⚔'));
 }
 
 function noteChip(c) {
-  const label = c.kind === 'wear' ? '穿' : c.kind === 'bring' ? '帶' : null;
-  return h('span', { class: `chip k-${c.kind}`, title: c.item ? c.item.zh : null },
+  const label = c.kind === 'wear' ? t('note.wear') : c.kind === 'bring' ? t('note.bring') : null;
+  return h('span', { class: `chip k-${c.kind}`, title: itemTitle(c.item) },
     label ? h('b', {}, label) : null,
     c.item && c.item.id ? iconImg(c.item.id, c.item.en, 44) : null,
     h('span', {}, c.item ? c.item.en : c.text));
@@ -370,7 +413,8 @@ function renderSlot(x, flash) {
     info.append(compInputs(s, idx));
   } else {
     info.append(h('div', { class: 'w-en' }, w ? w.en : (s.weapon || '—')));
-    if (w && w.zh) info.append(h('div', { class: 'w-zh' }, w.zh));
+    const sub = itemSub(w);
+    if (sub) info.append(h('div', { class: 'w-zh' }, sub));
     const list = parseNote(s.note);
     if (list.length) chips = h('div', { class: 'chips' }, list.map(noteChip));
   }
@@ -381,11 +425,11 @@ function renderSlot(x, flash) {
     if (admin) {
       mini.draggable = true;
       bindDrag(mini, sid);
-      mini.append(h('button', { class: 'mini-x', type: 'button', title: '移回報名池', 'aria-label': '移回報名池', onclick: e => { e.stopPropagation(); unassign(sid); } }, '✕'));
+      mini.append(h('button', { class: 'mini-x', type: 'button', title: t('slot.unassign'), 'aria-label': t('slot.unassign'), onclick: e => { e.stopPropagation(); unassign(sid); } }, '✕'));
     }
     player.append(mini);
   } else {
-    player.append(h('span', { class: 'p-open' }, admin && state.selected ? '點這裡放入' : '空缺 · OPEN'));
+    player.append(h('span', { class: 'p-open' }, admin && state.selected ? t('slot.drop') : t('slot.open')));
   }
   el.append(h('div', { class: 'slot-top' }, slotIcon(s, idx), info), chips || '', player);
 
@@ -409,7 +453,7 @@ function renderSlot(x, flash) {
 
 const saveComp = debounce(() => {
   if (!state.isAdmin || !state.config) return;
-  write({ 'config/comp': state.config.comp }, '配置已更新');
+  write({ 'config/comp': state.config.comp }, t('toast.compSaved'));
 }, 700);
 
 // 直接指向 state.config.comp 裡的 slot 物件(編輯時就地修改)
@@ -422,21 +466,21 @@ function configSlots() {
 }
 
 function compInputs(s, idx) {
-  const wInp = h('input', { class: 'inp', type: 'text', placeholder: '武器(例:heavy mace)', 'aria-label': '武器', spellcheck: 'false' });
-  const nInp = h('input', { class: 'inp', type: 'text', placeholder: '備註(例:bring incubus)', 'aria-label': '備註', spellcheck: 'false' });
+  const wInp = h('input', { class: 'inp', type: 'text', placeholder: 'heavy mace', 'aria-label': 'weapon', spellcheck: 'false' });
+  const nInp = h('input', { class: 'inp', type: 'text', placeholder: 'bring incubus', 'aria-label': 'note', spellcheck: 'false' });
   wInp.value = s.weapon || '';
   nInp.value = s.note || '';
   wInp.addEventListener('input', () => {
-    const t = configSlots()[idx];
-    if (!t) return;
-    t.weapon = wInp.value;
-    wInp.closest('.slot').querySelector('.slot-icon').replaceWith(slotIcon(t, idx));
+    const tg = configSlots()[idx];
+    if (!tg) return;
+    tg.weapon = wInp.value;
+    wInp.closest('.slot').querySelector('.slot-icon').replaceWith(slotIcon(tg, idx));
     saveComp();
   });
   nInp.addEventListener('input', () => {
-    const t = configSlots()[idx];
-    if (!t) return;
-    t.note = nInp.value;
+    const tg = configSlots()[idx];
+    if (!tg) return;
+    tg.note = nInp.value;
     saveComp();
   });
   for (const inp of [wInp, nInp]) inp.addEventListener('blur', () => setTimeout(flushStale, 0));
@@ -451,22 +495,23 @@ function renderPool() {
   const smap = slotMap();
   const nAssigned = list.filter(([sid]) => smap.has(sid)).length;
   const nFill = list.filter(([, su]) => su.fill).length;
-  const filters = [['all', `全部 ${list.length}`], ['open', `未排 ${list.length - nAssigned}`], ['fill', `補位 ${nFill}`]];
+  const filters = [['all', t('pool.all', { n: list.length })], ['open', t('pool.open', { n: list.length - nAssigned })], ['fill', t('pool.fill', { n: nFill })]];
 
   const head = h('div', { class: 'pool-head' },
-    h('h2', {}, '📋 報名名單'),
+    h('h2', {}, t('pool.title')),
     h('div', { class: 'seg-filter', role: 'tablist' }, filters.map(([k, label]) =>
       h('button', {
         type: 'button', class: state.filter === k ? 'on' : null, role: 'tab', 'aria-selected': String(state.filter === k),
         onclick: () => { state.filter = k; store.set(LS_FILTER, k); renderPool(); applySearch(); },
       }, label))),
-    admin ? h('button', { class: 'btn small', type: 'button', onclick: () => openSignup('admin-new') }, '➕ 新增') : null);
+    admin ? h('button', { class: 'btn small', type: 'button', onclick: () => openSignup('admin-new') }, t('pool.add')) : null);
 
   const shown = list.filter(([sid, su]) => (state.filter === 'open' ? !smap.has(sid) : state.filter === 'fill' ? su.fill : true));
   const grid = h('div', { class: 'pool-grid' });
   shown.forEach(([sid, su]) => grid.append(renderCard(sid, su, smap.get(sid), list.findIndex(([x]) => x === sid) + 1)));
-  if (!shown.length) grid.append(h('div', { class: 'pool-empty' }, list.length ? '這個分類沒有人' : '還沒有人報名,搶頭香!'));
-  pool.replaceChildren(head, grid, admin ? h('p', { class: 'pool-hint' }, '把名單上的人拖回這裡 = 取消排位') : '');
+  if (!shown.length) grid.append(h('div', { class: 'pool-empty' }, list.length ? t('pool.emptyCat') : t('pool.empty')));
+  pool.setAttribute('aria-label', t('pool.title'));
+  pool.replaceChildren(head, grid, admin ? h('p', { class: 'pool-hint' }, t('pool.hint')) : '');
 }
 
 function bindPoolDrop() {
@@ -497,8 +542,7 @@ function renderCard(sid, su, slotIdx, order) {
   let slotLabel = null;
   if (slotIdx != null) {
     const x = flatSlots()[slotIdx];
-    const w = x && lookup(x.s.weapon);
-    slotLabel = h('span', { class: `card-slot role-${x ? x.g.role : 'other'}` }, `#${pad2(slotIdx + 1)} ${w ? w.en : (x ? x.s.weapon : '')}`);
+    slotLabel = h('span', { class: `card-slot role-${x ? x.g.role : 'other'}` }, `#${pad2(slotIdx + 1)} ${x ? weaponLabel(x.s) : ''}`);
   }
   const prefs = asList(su.prefs);
   el.append(...[
@@ -506,15 +550,15 @@ function renderCard(sid, su, slotIdx, order) {
       h('span', { class: 'card-no' }, order),
       srcBadge(su.source),
       h('b', { class: 'card-name', title: su.name }, su.name),
-      mine ? h('span', { class: 'you' }, '你') : null),
-    slotLabel ? h('div', { class: 'card-assigned' }, '已排 ', slotLabel) : null,
+      mine ? h('span', { class: 'you' }, t('card.you')) : null),
+    slotLabel ? h('div', { class: 'card-assigned' }, t('card.assigned'), slotLabel) : null,
     (prefs.length || su.fill) ? h('div', { class: 'pchips' }, prefs.map(prefChip), su.fill ? fillChip() : null) : null,
     su.note ? h('div', { class: 'card-note' }, su.note) : null,
     h('div', { class: 'card-meta' },
       h('span', {}, rel(su.createdAt)),
       admin ? h('span', { class: 'card-actions' },
-        h('button', { type: 'button', title: '編輯', 'aria-label': '編輯', onclick: e => { e.stopPropagation(); openSignup('admin-edit', sid); } }, '✎'),
-        h('button', { type: 'button', title: '刪除', 'aria-label': '刪除', onclick: e => { e.stopPropagation(); deleteCard(sid); } }, '🗑')) : null),
+        h('button', { type: 'button', title: t('card.edit'), 'aria-label': t('card.edit'), onclick: e => { e.stopPropagation(); openSignup('admin-edit', sid); } }, '✎'),
+        h('button', { type: 'button', title: t('card.delete'), 'aria-label': t('card.delete'), onclick: e => { e.stopPropagation(); deleteCard(sid); } }, '🗑')) : null),
   ].filter(Boolean));
   if (admin) {
     el.draggable = true;
@@ -534,18 +578,17 @@ function renderMine() {
   let status;
   if (idx != null) {
     const x = flatSlots()[idx];
-    const w = lookup(x.s.weapon);
-    status = h('span', { class: 'mine-status ok' }, `🎯 已排在 #${pad2(idx + 1)} ${w ? w.en : x.s.weapon}(${roleOf(x.g).zh})`);
+    status = h('span', { class: 'mine-status ok' }, t('mine.assigned', { no: pad2(idx + 1), weapon: weaponLabel(x.s), role: roleOf(x.g).name }));
   } else {
-    status = h('span', { class: 'mine-status' }, '⏳ 等待隊長排位');
+    status = h('span', { class: 'mine-status' }, t('mine.waiting'));
   }
   box.hidden = false;
   box.replaceChildren(
-    h('div', { class: 'mine-main' }, h('b', {}, `✅ 你已報名:${su.name}`), status),
+    h('div', { class: 'mine-main' }, h('b', {}, t('mine.signed', { name: su.name })), status),
     h('div', { class: 'pchips' }, asList(su.prefs).map(prefChip), su.fill ? fillChip() : null),
     h('div', { class: 'mine-actions' },
-      h('button', { class: 'btn small', type: 'button', onclick: () => openSignup('self-edit', sid) }, '✏️ 修改'),
-      h('button', { class: 'btn small danger', type: 'button', onclick: withdraw }, '取消報名')));
+      h('button', { class: 'btn small', type: 'button', onclick: () => openSignup('self-edit', sid) }, t('mine.edit')),
+      h('button', { class: 'btn small danger', type: 'button', onclick: withdraw }, t('mine.withdraw'))));
 }
 
 /* ---------- 隊長:選取 / 拖曳 / 排位 ---------- */
@@ -562,9 +605,9 @@ function renderSelBar() {
   const assigned = slotMap().has(state.selected);
   bar.hidden = false;
   bar.replaceChildren(...[
-    h('span', { class: 'sel-text' }, '已選 ', h('b', {}, su.name), ' — 點一個位置放入'),
-    assigned ? h('button', { class: 'btn small', type: 'button', onclick: () => unassign(state.selected) }, '移回報名池') : null,
-    h('button', { class: 'btn small ghost', type: 'button', onclick: () => select(null) }, '取消'),
+    h('span', { class: 'sel-text' }, tNodes('sel.text', { name: h('b', {}, su.name) })),
+    assigned ? h('button', { class: 'btn small', type: 'button', onclick: () => unassign(state.selected) }, t('sel.back')) : null,
+    h('button', { class: 'btn small ghost', type: 'button', onclick: () => select(null) }, t('sel.cancel')),
   ].filter(Boolean));
 }
 
@@ -600,7 +643,7 @@ async function write(patch, okMsg) {
     return true;
   } catch (e) {
     console.error(e);
-    toast('⚠ 寫入失敗:' + errMsg(e), 5000);
+    toast(t('toast.writeFail', { err: errMsg(e) }), 5000);
     return false;
   }
 }
@@ -637,12 +680,12 @@ async function unassign(sid) {
 
 async function deleteCard(sid) {
   const su = signup(sid);
-  if (!su || !confirm(`刪除「${su.name}」的報名?`)) return;
+  if (!su || !confirm(t('confirm.delete', { name: su.name }))) return;
   const patch = { [`signups/${sid}`]: null };
   const from = slotMap().get(sid);
   if (from != null) patch[`assign/s${from}`] = null;
   if (state.selected === sid) state.selected = null;
-  await write(patch, '已刪除');
+  await write(patch, t('toast.deleted'));
 }
 
 /* ---------- 報名表單 ---------- */
@@ -655,28 +698,35 @@ function uniqueWeapons() {
   return [...seen.values()];
 }
 
+const SIGNUP_TITLES = { 'self-new': 'su.titleNew', 'self-edit': 'su.titleEdit', 'admin-new': 'su.titleAdminNew', 'admin-edit': 'su.titleAdminEdit' };
+
 function openSignup(mode, sid) {
   if (!state.backend) return;
   if (mode === 'self-new' && signup(mySid())) { mode = 'self-edit'; sid = mySid(); }
   const su = sid ? signup(sid) : null;
   state.dlg = { mode, sid, prefs: asList(su && su.prefs).slice(0, MAX_PREFS) };
-  $('#suTitle').textContent = { 'self-new': '📝 我要報名', 'self-edit': '✏️ 修改報名', 'admin-new': '➕ 新增卡片', 'admin-edit': '✎ 編輯卡片' }[mode];
   $('#suName').value = su ? su.name : (mode === 'self-new' ? (store.get(LS_ME) || '') : '');
   $('#suFill').checked = su ? !!su.fill : false;
   $('#suNote').value = (su && su.note) || '';
   $('#suWithdraw').hidden = mode !== 'self-edit';
-  $('#suSubmit').textContent = mode === 'self-new' ? '送出報名' : '儲存';
   $('#suMsg').textContent = '';
-  renderPicker();
+  renderSignupLabels();
   $('#signupDlg').showModal();
   if (!$('#suName').value) $('#suName').focus();
+}
+
+function renderSignupLabels() {
+  if (!state.dlg) return;
+  $('#suTitle').textContent = t(SIGNUP_TITLES[state.dlg.mode]);
+  $('#suSubmit').textContent = state.dlg.mode === 'self-new' ? t('su.submit') : t('su.save');
+  renderPicker();
 }
 
 function renderPicker() {
   const box = $('#suPicker');
   const sel = state.dlg.prefs;
   const full = sel.length >= MAX_PREFS;
-  $('#suCount').textContent = `(已選 ${sel.length}/${MAX_PREFS})`;
+  $('#suCount').textContent = t('su.count', { n: sel.length, max: MAX_PREFS });
   const btn = (key, role, content, title) => {
     const on = sel.includes(key);
     return h('button', {
@@ -693,13 +743,13 @@ function renderPicker() {
   box.replaceChildren(...comp().map(g => {
     const role = roleOf(g);
     return h('div', { class: `pick-group role-${g.role}` },
-      h('div', { class: 'pick-head' }, h('i'), role.zh),
+      h('div', { class: 'pick-head' }, h('i'), role.name),
       h('div', { class: 'pick-row' },
-        btn(`role:${g.role}`, g.role, [h('span', { class: 'pick-any' }, role.emoji), h('span', {}, `任何${role.zh}`)], `任何${role.zh}位置都可以`),
+        btn(`role:${g.role}`, g.role, [h('span', { class: 'pick-any' }, role.emoji), h('span', {}, t('su.any', { role: role.name }))], t('su.anyTitle', { role: role.name })),
         weapons.filter(w => w.role === g.role).map(w => btn(w.key, g.role, [
           w.item && w.item.id ? iconImg(w.item.id, w.item.en, 64) : h('span', { class: 'pick-any' }, '⚔'),
           h('span', {}, w.item ? w.item.en : w.text),
-        ], w.item ? w.item.zh : null))));
+        ], itemTitle(w.item)))));
   }));
 }
 
@@ -711,8 +761,8 @@ async function submitSignup(e) {
   const fill = $('#suFill').checked;
   const note = $('#suNote').value.trim();
   const prefs = state.dlg.prefs.slice(0, MAX_PREFS);
-  if (!name) { msg.textContent = '請輸入遊戲名字'; $('#suName').focus(); return; }
-  if (!prefs.length && !fill) { msg.textContent = '請至少選一個位置或職業,或勾選補位'; return; }
+  if (!name) { msg.textContent = t('su.errName'); $('#suName').focus(); return; }
+  if (!prefs.length && !fill) { msg.textContent = t('su.errPrefs'); return; }
   const btn = $('#suSubmit');
   btn.disabled = true;
   msg.textContent = '';
@@ -737,12 +787,12 @@ async function submitSignup(e) {
     }
     await B.update(patch);
     $('#signupDlg').close();
-    toast(mode === 'self-new' ? '✅ 報名成功!隊長排位後這裡會即時更新' : '已儲存');
+    toast(mode === 'self-new' ? t('toast.signedUp') : t('toast.saved'));
     if (mode.startsWith('self')) { state.query = name; $('#search').value = name; }
     render();
   } catch (err) {
     console.error(err);
-    msg.textContent = '送出失敗:' + errMsg(err);
+    msg.textContent = t('su.errSend') + errMsg(err);
   } finally {
     btn.disabled = false;
   }
@@ -750,9 +800,9 @@ async function submitSignup(e) {
 
 async function withdraw() {
   const sid = mySid();
-  if (!signup(sid) || !confirm('確定要取消報名嗎?')) return;
+  if (!signup(sid) || !confirm(t('confirm.withdraw'))) return;
   if ($('#signupDlg').open) $('#signupDlg').close();
-  await write({ [`signups/${sid}`]: null }, '已取消報名');
+  await write({ [`signups/${sid}`]: null }, t('toast.withdrawn'));
 }
 
 /* ================= 搜尋 / 複製 ================= */
@@ -764,19 +814,18 @@ function applySearch() {
   if (!q) return;
   const hits = flatSlots().filter(x => { const su = signup(sidAt(x.idx)); return su && norm(su.name).includes(q); });
   if (hits.length) {
-    out.append('你在 ');
+    out.append(t('search.youAre'));
     for (const x of hits.slice(0, 4)) {
-      const w = lookup(x.s.weapon);
-      out.append(h('button', { type: 'button', onclick: () => scrollToEl(`.slot[data-idx="${x.idx}"]`) }, `#${pad2(x.idx + 1)} ${w ? w.en : x.s.weapon}(${roleOf(x.g).zh})`));
+      out.append(h('button', { type: 'button', onclick: () => scrollToEl(`.slot[data-idx="${x.idx}"]`) }, `#${pad2(x.idx + 1)} ${weaponLabel(x.s)} (${roleOf(x.g).name})`));
     }
     return;
   }
   const waiting = sortedSignups().find(([, su]) => norm(su.name).includes(q));
   if (waiting) {
-    out.append(h('button', { type: 'button', onclick: () => scrollToEl(`.card[data-sid="${waiting[0]}"]`) }, '已報名,等待隊長排位'));
+    out.append(h('button', { type: 'button', onclick: () => scrollToEl(`.card[data-sid="${waiting[0]}"]`) }, t('search.waiting')));
     return;
   }
-  out.textContent = '名單上還沒有這個名字';
+  out.textContent = t('search.none');
 }
 
 function scrollToEl(sel) {
@@ -809,6 +858,29 @@ async function copyText(text) {
   }
 }
 
+/* ================= 語言選擇 ================= */
+function setLang(code) {
+  LANG = langMeta(code).code;
+  store.set(LS_LANG, LANG);
+  applyStatic();
+  render();
+  if ($('#signupDlg').open) renderSignupLabels();
+}
+
+function openLangDlg(gate) {
+  const dlg = $('#langDlg');
+  dlg.dataset.gate = gate ? '1' : '';
+  $('#langClose').hidden = !!gate;
+  const suggested = gate ? detectLang() : LANG;
+  $('#langGrid').replaceChildren(...LANGS.map(l => h('button', {
+    type: 'button', class: `lang-opt${l.code === suggested ? ' suggested' : ''}${!gate && l.code === LANG ? ' current' : ''}`, lang: l.html,
+    onclick: () => { dlg.close(); setLang(l.code); },
+  }, h('b', {}, l.native), h('small', {}, l.en))));
+  dlg.showModal();
+  const focus = dlg.querySelector('.lang-opt.suggested') || dlg.querySelector('.lang-opt');
+  if (focus) focus.focus();
+}
+
 /* ================= 登入 / 資料連線 ================= */
 let adminUnsub = null;
 function onAuthChanged(user) {
@@ -824,7 +896,7 @@ function onAuthChanged(user) {
       state.isAdmin = v === true;
       if (state.isAdmin) {
         if ($('#adminDlg').open) $('#adminDlg').close();
-        if (!was) toast('👑 已進入隊長模式');
+        if (!was) toast(t('toast.captain'));
         seedConfig();
       } else {
         $('#uidText').textContent = user.uid;
@@ -848,7 +920,7 @@ async function seedConfig() {
     if (res.ok) legacy = await res.json();
   } catch { /* 沒有舊名單就用預設 */ }
   if (!legacy || !Array.isArray(legacy.groups)) {
-    await write({ config: DEFAULT_CONFIG }, '已建立預設配置');
+    await write({ config: DEFAULT_CONFIG }, t('toast.seeded'));
     return;
   }
   const ev = legacy.event || {};
@@ -869,7 +941,7 @@ async function seedConfig() {
     }
     idx++;
   }
-  await write(patch, `已匯入舊名單(${n} 人)`);
+  await write(patch, t('toast.imported', { n }));
 }
 
 async function captainLogin() {
@@ -879,14 +951,14 @@ async function captainLogin() {
   } catch (e) {
     if (/popup-closed|cancelled-popup/.test(e.code || '')) return;
     console.error(e);
-    toast('⚠ 登入失敗:' + errMsg(e), 6000);
+    toast(t('toast.loginFail', { err: errMsg(e) }), 6000);
   }
 }
 
 async function logout() {
   await state.backend.signOut();
   onAuthChanged(null);
-  toast('已登出');
+  toast(t('toast.loggedOut'));
 }
 
 function connect(B) {
@@ -906,7 +978,7 @@ function connect(B) {
   B.watch('signups', v => {
     const next = v || {};
     if (state.knownSids && state.isAdmin) {
-      for (const [sid, su] of Object.entries(next)) if (!state.knownSids.has(sid) && su && su.name) toast(`🆕 ${su.name} 報名了`);
+      for (const [sid, su] of Object.entries(next)) if (!state.knownSids.has(sid) && su && su.name) toast(t('toast.newSignup', { name: su.name }));
     }
     state.knownSids = new Set(Object.keys(next));
     state.signups = next;
@@ -924,26 +996,25 @@ function bindUI() {
   search.addEventListener('keydown', e => { if (e.key === 'Enter') { const b = $('#searchResult button'); if (b) b.click(); } });
 
   $('#signupBtn').addEventListener('click', () => openSignup('self-new'));
-  $('#copyBtn').addEventListener('click', async () => toast(await copyText(toDiscord()) ? '📋 已複製,直接貼到 Discord 就好' : '⚠ 複製失敗'));
+  $('#copyBtn').addEventListener('click', async () => toast(await copyText(toDiscord()) ? t('toast.copied') : t('toast.copyFail')));
   $('#loginBtn').addEventListener('click', captainLogin);
+  $('#langBtn').addEventListener('click', () => openLangDlg(false));
+  $('#langClose').addEventListener('click', () => $('#langDlg').close());
+  $('#langDlg').addEventListener('cancel', e => { if ($('#langDlg').dataset.gate) e.preventDefault(); });
   $('#logoutBtn').addEventListener('click', logout);
   $('#adminDlgLogout').addEventListener('click', () => { $('#adminDlg').close(); logout(); });
-  $('#uidCopy').addEventListener('click', async () => toast(await copyText($('#uidText').textContent) ? 'UID 已複製' : '⚠ 複製失敗'));
+  $('#uidCopy').addEventListener('click', async () => toast(await copyText($('#uidText').textContent) ? t('toast.uidCopied') : t('toast.copyFail')));
 
   $('#evToggle').addEventListener('click', () => { state.editEvent = !state.editEvent; render(); });
   $('#compToggle').addEventListener('click', () => { state.editComp = !state.editComp; state.prevSlotSids = null; render(); });
   $('#addCardBtn').addEventListener('click', () => openSignup('admin-new'));
-  $('#clearAssignBtn').addEventListener('click', () => {
-    if (confirm('清空全部位置的排位?(報名卡片會留著)')) write({ assign: null }, '已清空排位');
-  });
-  $('#resetBtn').addEventListener('click', () => {
-    if (confirm('開新一場:清空「所有報名」和「排位」,確定嗎?\n(隊伍配置和活動資訊會保留)')) write({ signups: null, assign: null }, '已開新一場');
-  });
+  $('#clearAssignBtn').addEventListener('click', () => { if (confirm(t('confirm.clear'))) write({ assign: null }, t('toast.cleared')); });
+  $('#resetBtn').addEventListener('click', () => { if (confirm(t('confirm.reset'))) write({ signups: null, assign: null }, t('toast.reset')); });
 
   const saveEvent = debounce((key, val) => write({ [`config/event/${key}`]: val }), 600);
   for (const inp of document.querySelectorAll('#eventEdit input')) {
     inp.addEventListener('input', () => {
-      if (inp.dataset.key === 'title') $('#title').textContent = inp.value || '隊伍名單';
+      if (inp.dataset.key === 'title') $('#title').textContent = inp.value || t('title.default');
       saveEvent(inp.dataset.key, inp.value);
     });
   }
@@ -959,16 +1030,23 @@ function bindUI() {
 }
 
 async function init() {
+  const params = new URLSearchParams(location.search);
+  const urlLang = params.get('lang');
+  const saved = store.get(LS_LANG);
+  const chosen = (urlLang && LANGS.some(l => l.code === urlLang)) ? urlLang : saved;
+  LANG = chosen || detectLang();
+  if (urlLang && chosen === urlLang) store.set(LS_LANG, urlLang);
+  applyStatic();
   bindUI();
   const me = store.get(LS_ME);
   if (me) { state.query = me; $('#search').value = me; }
-  const params = new URLSearchParams(location.search);
+  if (!chosen) openLangDlg(true);   // 第一次來:先選語言
   try {
     if (params.has('mock')) connect((await import('./backend-mock.js')).createBackend());
-    else if (FIREBASE_CONFIG) connect((await import('./backend-firebase.js')).createBackend(FIREBASE_CONFIG));
+    else if (FIREBASE_CONFIG) connect((await import('./backend-firebase.js?v=3')).createBackend(FIREBASE_CONFIG));
   } catch (e) {
     console.error(e);
-    toast('⚠ 資料庫連線失敗:' + errMsg(e), 8000);
+    toast(t('toast.dbFail', { err: errMsg(e) }), 8000);
   }
   if (!state.backend) { state.config = null; render(); }
 }
