@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
   <div class="bg-glow" aria-hidden="true"></div>
@@ -27,6 +27,7 @@
       <button class="btn" id="evToggle" type="button" aria-pressed="false" data-i18n="ab.event">✏️ 活動資訊</button>
       <button class="btn" id="compToggle" type="button" aria-pressed="false" data-i18n="ab.comp">⚙ 編輯配置</button>
       <button class="btn" id="addCardBtn" type="button" data-i18n="ab.add">➕ 新增卡片</button>
+      <button class="btn" id="dcBtn" type="button" data-i18n="ab.discord">📣 Discord</button>
       <button class="btn danger" id="clearAssignBtn" type="button" data-i18n="ab.clear">🧹 清空排位</button>
       <button class="btn danger" id="resetBtn" type="button" data-i18n="ab.reset">🗑 開新一場</button>
       <button class="btn ghost" id="logoutBtn" type="button" data-i18n="ab.logout">登出</button>
@@ -111,6 +112,27 @@
     <div class="dlg-actions"><button class="btn primary" type="button" id="lockOk" data-i18n="lock.ok">知道了</button></div>
   </dialog>
 
+  <dialog id="dcDlg">
+    <form id="dcForm">
+      <h2 data-i18n="dc.title">📣 發送到 Discord</h2>
+      <p class="dlg-sub" data-i18n="dc.desc"></p>
+      <label class="field"><span data-i18n="dc.url">Webhook 網址</span>
+        <input class="inp" id="dcUrl" type="password" autocomplete="off" spellcheck="false" placeholder="https://discord.com/api/webhooks/…">
+      </label>
+      <label class="check"><input type="checkbox" id="dcAuto"> <span data-i18n="dc.auto"></span></label>
+      <label class="check"><input type="checkbox" id="dcEveryone"> <span data-i18n="dc.everyone"></span></label>
+      <label class="field"><span data-i18n="dc.lang">訊息語言</span><select class="inp" id="dcLang"></select></label>
+      <p class="dlg-note" id="dcStatus"></p>
+      <p class="dlg-msg" id="dcMsg"></p>
+      <div class="dlg-actions">
+        <button class="btn" type="button" id="dcSend" data-i18n="dc.sendNow">📣 立即發送目前名單</button>
+        <span class="spacer"></span>
+        <button class="btn ghost" type="button" data-close data-i18n="su.close">關閉</button>
+        <button class="btn primary" type="submit" data-i18n="dc.save">儲存</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="signupDlg">
     <form id="signupForm">
       <h2 id="suTitle"></h2>
@@ -152,6 +174,6 @@
   </dialog>
 
   <noscript><p class="wrap">JavaScript is required · 這個頁面需要啟用 JavaScript</p></noscript>
-  <script type="module" src="app.js?v=4"></script>
+  <script type="module" src="app.js?v=5"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@ import {
   signInWithPopup, linkWithPopup, signInWithCredential, signOut,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import {
-  getDatabase, ref, onValue, update, serverTimestamp,
+  getDatabase, ref, onValue, update, serverTimestamp, runTransaction,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 
 export function createBackend(config) {
@@ -45,5 +45,10 @@ export function createBackend(config) {
     },
     signOut: () => signOut(auth),
     update: patch => update(ref(db), patch),
+    // 搶「這件事由我來做」:值已經是 value 就回傳 false(別人做過了)
+    async claim(path, value) {
+      const res = await runTransaction(ref(db, path), cur => (cur === value ? undefined : value));
+      return res.committed;
+    },
   };
 }

@@ -67,6 +67,14 @@ export function createBackend() {
     },
     async captainSignIn() { setUser({ uid: 'captain', isAnonymous: false, email: 'captain@example.test' }); },
     async signOut() { setUser(null); },
+    async claim(path, value) {
+      const db = load();
+      if (getPath(db, path) === value) return false;
+      setPath(db, path, value);
+      save(db);
+      fire();
+      return true;
+    },
     async update(patch) {
       const db = load();
       for (const [p, v] of Object.entries(patch)) setPath(db, p, resolve(v));

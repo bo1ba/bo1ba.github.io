@@ -1,5 +1,5 @@
-import { FIREBASE_CONFIG } from './firebase-config.js?v=4';
-import { LANGS, STRINGS, ITEM_NAMES, detectLang } from './i18n.js?v=4';
+import { FIREBASE_CONFIG } from './firebase-config.js?v=5';
+import { LANGS, STRINGS, ITEM_NAMES, detectLang } from './i18n.js?v=5';
 
 /* ================= 基本資料 ================= */
 const LS_ME = 'roster.me';
@@ -104,11 +104,12 @@ function h(tag, attrs, ...kids) {
 /* ---------- 多語系 ---------- */
 let LANG = 'zh';
 const langMeta = code => LANGS.find(l => l.code === code) || LANGS[0];
-function t(key, vars) {
-  let s = (STRINGS[LANG] || {})[key] ?? STRINGS.en[key] ?? STRINGS.zh[key] ?? key;
+function tl(lang, key, vars) {
+  let s = (STRINGS[lang] || {})[key] ?? STRINGS.en[key] ?? STRINGS.zh[key] ?? key;
   if (vars) s = s.replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? vars[k] : m));
   return s;
 }
+const t = (key, vars) => tl(LANG, key, vars);
 // 模板裡的 {name} 換成 DOM 節點(例如粗體名字)
 function tNodes(key, nodes) {
   return t(key).split(/(\{\w+\})/).filter(Boolean).map(part => {
@@ -1104,6 +1105,7 @@ function tick() {
   if (chip) chip.textContent = countdownText(now);
   if ($('#lockDlg').open) updateLockCountdown(now);
   if (!state.loaded.has('config')) return;
+  maybeAutoSend();
   const prev = state.phase;
   if (ph === prev) return;
   state.phase = ph;
@@ -1112,6 +1114,152 @@ function tick() {
   if (ph === 'locked' && prev === 'open') triggerAlarm();
   else if ((ph === 'locked' || ph === 'started') && store.get(LS_LOCKSEEN) !== String(s)) openLockDlg(true);
   else if (!(ph === 'locked' || ph === 'started') && $('#lockDlg').open) $('#lockDlg').close();
+}
+
+/* ================= Discord(Webhook)================= */
+const LS_DISCORD = 'roster.discord';
+const WEBHOOK_RE = /^https:\/\/(?:ptb\.|canary\.)?discord(?:app)?\.com\/api\/webhooks\/\d+\/[\w-]+/;
+function dcCfg() {
+  let c = {};
+  try { c = JSON.parse(store.get(LS_DISCORD) || '{}') || {}; } catch { /* 壞掉就用預設 */ }
+  return { url: c.url || '', auto: c.auto !== false, everyone: c.everyone !== false, lang: c.lang || LANG };
+}
+const dcEsc = s => String(s || '').replace(/[\\*_`~|>]/g, '\\$&');
+const siteUrl = () => location.origin + location.pathname;
+
+function buildDiscordPayload(kind, dc) {
+  const L = dc.lang;
+  const tt = (k, v) => tl(L, k, v);
+  const ev = cfg().event || {};
+  const title = ev.title || tt('title.default');
+  const slots = flatSlots();
+  const filled = slots.filter(x => sidAt(x.idx)).length;
+  const s = startAt();
+  const desc = [];
+  if (s) desc.push(`🕘 **${tt('dc.startLabel')}**: <t:${Math.floor(s / 1000)}:F> · <t:${Math.floor(s / 1000)}:R>`);
+  if (ev.note) desc.push(`📢 ${dcEsc(ev.note)}`);
+  desc.push(`👉 [${tt('dc.site')}](${siteUrl()})`);
+  const fields = comp().map((g, gi) => {
+    const mine = slots.filter(x => x.gi === gi);
+    const r = ROLES[g.role];
+    const name = g.name || tt(`role.${r ? g.role : 'other'}`);
+    const lines = mine.map(x => {
+      const su = signup(sidAt(x.idx));
+      const who = !su ? `*${tt('dc.empty')}*` : su.discordId ? `<@${su.discordId}>` : `**${dcEsc(su.name)}**`;
+      return `\`${pad2(x.idx + 1)}\` ${dcEsc(weaponLabel(x.s))} — ${who}`;
+    });
+    return { name: `${r ? r.emoji : '•'} ${name} ${mine.filter(x => sidAt(x.idx)).length}/${mine.length}`, value: lines.join('\n').slice(0, 1024) || '—', inline: false };
+  });
+  const smap = slotMap();
+  const bench = sortedSignups().filter(([sid]) => !smap.has(sid)).map(([, su]) => dcEsc(su.name));
+  if (bench.length) fields.push({ name: `${tt('dc.bench')} (${bench.length})`, value: bench.join(', ').slice(0, 1024), inline: false });
+  const locked = kind === 'lock';
+  const content = `${dc.everyone ? '@everyone ' : ''}${tt(locked ? 'dc.lockContent' : 'dc.rosterContent', { title: dcEsc(title) })}`;
+  return {
+    username: 'Albion Roster',
+    avatar_url: iconUrl('T8_2H_MACE', 128),
+    content,
+    allowed_mentions: { parse: dc.everyone ? ['everyone'] : [] },
+    embeds: [{
+      title: tt(locked ? 'dc.embedLocked' : 'dc.embedRoster', { n: filled, total: slots.length }),
+      url: siteUrl(),
+      color: locked ? 0xff6f61 : 0xe0b866,
+      description: desc.join('\n'),
+      fields,
+    }],
+  };
+}
+
+async function sendDiscord(kind, dc = dcCfg()) {
+  if (!dc.url) throw new Error(t('dc.noUrl'));
+  const res = await fetch(`${dc.url}${dc.url.includes('?') ? '&' : '?'}wait=true`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(buildDiscordPayload(kind, dc)),
+  });
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try { const j = await res.json(); if (j && j.message) msg += ` ${j.message}`; } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+}
+
+// 隊長的網頁開著時:進入鎖定(開始前 15 分鐘)就自動發一次;用資料庫 config/notifiedAt 防止多個分頁重複發
+let autoSendBusy = false;
+let autoSendRetryAt = 0;
+async function maybeAutoSend() {
+  if (!state.isAdmin || autoSendBusy || Date.now() < autoSendRetryAt) return;
+  const dc = dcCfg();
+  const s = startAt();
+  if (!dc.url || !dc.auto || phase() !== 'locked' || cfg().notifiedAt === s) return;
+  autoSendBusy = true;
+  try {
+    if (!(await state.backend.claim('config/notifiedAt', s))) return;
+    try {
+      await sendDiscord('lock', dc);
+      toast(t('dc.autoSent'), 5000);
+    } catch (e) {
+      await state.backend.update({ 'config/notifiedAt': null });   // 發送失敗:放掉,1 分鐘後再試
+      autoSendRetryAt = Date.now() + 60e3;
+      toast(t('dc.fail', { err: e.message || e }), 8000);
+    }
+  } catch (e) {
+    console.error(e);
+    autoSendRetryAt = Date.now() + 60e3;
+  } finally {
+    autoSendBusy = false;
+  }
+}
+
+function renderDcStatus() {
+  const s = startAt();
+  const el = $('#dcStatus');
+  if (!s || phase() === 'ended') el.textContent = t('dc.statusNoTime');
+  else if (cfg().notifiedAt === s) el.textContent = t('dc.statusSent');
+  else el.textContent = t('dc.statusWait', { time: localTimeText(s - LOCK_MS) });
+}
+
+function openDcDlg() {
+  const dc = dcCfg();
+  $('#dcUrl').value = dc.url;
+  $('#dcAuto').checked = dc.auto;
+  $('#dcEveryone').checked = dc.everyone;
+  $('#dcLang').replaceChildren(...LANGS.map(l => h('option', { value: l.code, selected: l.code === dc.lang ? true : null }, l.native)));
+  $('#dcMsg').textContent = '';
+  renderDcStatus();
+  $('#dcDlg').showModal();
+}
+
+function readDcForm() {
+  return { url: $('#dcUrl').value.trim(), auto: $('#dcAuto').checked, everyone: $('#dcEveryone').checked, lang: $('#dcLang').value };
+}
+
+function saveDc(e) {
+  e.preventDefault();
+  const c = readDcForm();
+  if (c.url && !WEBHOOK_RE.test(c.url)) { $('#dcMsg').textContent = t('dc.badUrl'); return; }
+  store.set(LS_DISCORD, JSON.stringify(c));
+  $('#dcDlg').close();
+  toast(t('dc.saved'));
+}
+
+async function sendDcNow() {
+  const c = readDcForm();
+  if (!c.url) { $('#dcMsg').textContent = t('dc.noUrl'); return; }
+  if (!WEBHOOK_RE.test(c.url)) { $('#dcMsg').textContent = t('dc.badUrl'); return; }
+  if (!confirm(t('dc.confirmSend'))) return;
+  store.set(LS_DISCORD, JSON.stringify(c));
+  const btn = $('#dcSend');
+  btn.disabled = true;
+  try {
+    await sendDiscord(isLocked() ? 'lock' : 'roster', c);
+    $('#dcMsg').textContent = '';
+    toast(t('dc.sent'));
+  } catch (err) {
+    $('#dcMsg').textContent = t('dc.fail', { err: err.message || err });
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 /* ================= 語言選擇 ================= */
@@ -1274,6 +1422,9 @@ function bindUI() {
   });
   $('#evStartClear').addEventListener('click', () => write({ 'config/event/startAt': null }));
   $('#notifyBtn').addEventListener('click', toggleNotify);
+  $('#dcBtn').addEventListener('click', openDcDlg);
+  $('#dcForm').addEventListener('submit', saveDc);
+  $('#dcSend').addEventListener('click', sendDcNow);
   $('#lockOk').addEventListener('click', closeLockDlg);
   $('#lockDlg').addEventListener('cancel', e => { e.preventDefault(); closeLockDlg(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) stopTitleFlash(); });
@@ -1309,8 +1460,8 @@ async function init() {
   if (me) { state.query = me; $('#search').value = me; }
   if (!chosen) openLangDlg(true);   // 第一次來:先選語言
   try {
-    if (params.has('mock')) connect((await import('./backend-mock.js')).createBackend());
-    else if (FIREBASE_CONFIG) connect((await import('./backend-firebase.js?v=4')).createBackend(FIREBASE_CONFIG));
+    if (params.has('mock')) connect((await import('./backend-mock.js?v=5')).createBackend());
+    else if (FIREBASE_CONFIG) connect((await import('./backend-firebase.js?v=5')).createBackend(FIREBASE_CONFIG));
   } catch (e) {
     console.error(e);
     toast(t('toast.dbFail', { err: errMsg(e) }), 8000);
