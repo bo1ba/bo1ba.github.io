@@ -54,7 +54,7 @@ const DEFAULT_CONFIG = {
       { weapon: 'earthrune', note: 'Royal Armor' },
     ] },
     { role: 'dps', slots: [
-      { weapon: 'forge hammer', note: 'bring pve weapon' },
+      { weapon: 'forge hammer', note: 'royal jacket bring pve weapon' },
       { weapon: 'melee', note: '' },
       { weapon: 'lightcaller', note: '' },
       { weapon: 'lightcaller', note: '' },
@@ -66,7 +66,7 @@ const DEFAULT_CONFIG = {
     { role: 'support', slots: [
       { weapon: 'Rootbound', note: 'Royal Armor bring occu' },
       { weapon: 'oath', note: 'royal jacket bring pve weapon' },
-      { weapon: 'evensong', note: 'bring occu' },
+      { weapon: 'evensong', note: 'royal jacket bring occu' },
       { weapon: 'GA', note: '' },
     ] },
     { role: 'healer', slots: [
