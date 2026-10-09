@@ -588,3 +588,60 @@ html:lang(vi) {
   border: 1px solid var(--line-2); background: transparent; color: var(--muted);
 }
 .lang-close:hover { color: var(--text); border-color: var(--gold); }
+
+/* ================= 活動時間 / 倒數 / 鎖定 ================= */
+.meta-chip.muted { color: var(--muted); }
+.meta-chip.cd { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--gold); border-color: rgba(224, 184, 102, .45); }
+.meta-chip.cd-locked { color: #ffb3a8; border-color: rgba(255, 111, 97, .55); background: rgba(255, 111, 97, .1); }
+.meta-chip.cd-started { color: var(--ok); border-color: rgba(79, 214, 142, .5); background: rgba(79, 214, 142, .08); }
+.meta-chip.cd-ended { color: var(--faint); border-color: var(--line); font-weight: 500; }
+button.meta-chip { font: inherit; font-size: 14px; color: var(--text); cursor: pointer; }
+.meta-chip.lock-view { border-color: rgba(255, 111, 97, .55); }
+.meta-chip.lock-view:hover { background: rgba(255, 111, 97, .12); }
+
+.ev-start { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.dt-row { display: flex; gap: 6px; }
+.dt-row .inp { flex: 1; min-width: 0; }
+.dt-hint { min-height: 1.3em; color: var(--gold); font-size: 12px; }
+
+.lock-dlg {
+  width: min(780px, calc(100vw - 24px)); max-height: calc(100vh - 32px); padding: 22px;
+  border-color: rgba(255, 111, 97, .5);
+  box-shadow: 0 0 0 1px rgba(255, 111, 97, .25), 0 30px 80px rgba(0, 0, 0, .6), 0 0 90px rgba(255, 111, 97, .16);
+}
+.lock-dlg::backdrop { background: rgba(10, 4, 4, .84); backdrop-filter: blur(4px); }
+.lock-head { display: grid; justify-items: center; gap: 4px; margin-bottom: 12px; text-align: center; }
+.lock-badge { font-size: 34px; animation: lockpulse 1.4s ease-in-out infinite; }
+@keyframes lockpulse { 50% { transform: scale(1.12); filter: drop-shadow(0 0 12px rgba(255, 111, 97, .7)); } }
+.lock-head h2 { margin: 0; font-size: 26px; font-weight: 900; color: #ffb3a8; }
+.lock-sub { margin: 0; font-size: 13.5px; color: var(--muted); }
+.lock-cd { display: grid; justify-items: center; margin-top: 6px; }
+.lock-cd small { font-size: 12px; letter-spacing: .1em; color: var(--muted); }
+.lock-cd b { font-family: var(--font-display); font-size: 46px; line-height: 1.1; color: var(--warn); font-variant-numeric: tabular-nums; }
+.lock-dlg.is-started .lock-cd b { font-size: 30px; color: var(--ok); }
+.lock-time { font-size: 13px; color: var(--muted); }
+.lock-you { margin: 6px 0 12px; padding: 10px 14px; border-radius: 12px; text-align: center; font-weight: 800; }
+.lock-you.ok { color: var(--ok); background: rgba(79, 214, 142, .12); border: 1px solid rgba(79, 214, 142, .5); }
+.lock-you.bench { color: var(--warn); background: rgba(240, 181, 74, .1); border: 1px solid rgba(240, 181, 74, .45); }
+.lock-roster { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(min(330px, 100%), 1fr)); }
+.lock-group {
+  padding: 8px 10px; border-radius: 12px;
+  border: 1px solid var(--line); border-left: 3px solid var(--rc, var(--gold));
+  background: rgba(255, 255, 255, .02);
+}
+.lock-ghead { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 13px; font-weight: 900; }
+.lock-ghead i { width: 8px; height: 8px; border-radius: 3px; background: var(--rc, var(--gold)); }
+.lock-ghead b { margin-left: auto; font-size: 12px; font-weight: 700; color: var(--muted); }
+.lock-row {
+  display: grid; grid-template-columns: 20px 22px minmax(0, 1fr) minmax(0, 1.2fr); align-items: center; gap: 8px;
+  padding: 3px 4px; border-radius: 7px; font-size: 13.5px;
+}
+.lock-row img { width: 22px; height: 22px; }
+.lock-row .glyph { font-size: 14px; text-align: center; }
+.lock-no { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.lock-w { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--muted); }
+.lock-p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; }
+.lock-row.empty .lock-p { font-weight: 600; color: var(--bad); opacity: .85; }
+.lock-row.me { background: rgba(79, 214, 142, .14); box-shadow: inset 0 0 0 1px rgba(79, 214, 142, .5); }
+.lock-bench { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+.lock-bench b { color: var(--text); }

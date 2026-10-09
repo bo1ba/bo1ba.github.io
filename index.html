@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
   <div class="bg-glow" aria-hidden="true"></div>
@@ -40,7 +40,14 @@
       <div class="event-meta" id="eventMeta" hidden></div>
       <div class="event-edit" id="eventEdit" hidden>
         <label><span data-i18n="ev.title">標題</span><input class="inp" id="evTitle" maxlength="60" data-key="title"></label>
-        <label><span data-i18n="ev.time">時間</span><input class="inp" id="evTime" maxlength="60" data-key="time" data-i18n-ph="ev.timePh"></label>
+        <div class="ev-start">
+          <label for="evStart" data-i18n="ev.start">開始時間(UTC)</label>
+          <div class="dt-row">
+            <input class="inp" id="evStart" type="datetime-local" step="60">
+            <button class="btn small ghost" type="button" id="evStartClear" data-i18n="ev.clearStart">清除</button>
+          </div>
+          <small class="dt-hint" id="evStartHint"></small>
+        </div>
         <label><span data-i18n="ev.note">公告</span><input class="inp" id="evNote" maxlength="120" data-key="note" data-i18n-ph="ev.notePh"></label>
       </div>
       <div class="overview">
@@ -65,6 +72,7 @@
     <span class="spacer"></span>
     <button class="btn primary" id="signupBtn" type="button" disabled data-i18n="btn.signup">📝 我要報名</button>
     <button class="btn" id="copyBtn" type="button" data-i18n="btn.copy">📋 複製 Discord 格式</button>
+    <button class="btn ghost" id="notifyBtn" type="button" hidden></button>
     <button class="btn ghost" id="loginBtn" type="button" data-i18n="btn.login">👑 隊長登入</button>
     <button class="btn ghost lang-btn" id="langBtn" type="button" aria-label="Language">🌐 <span id="langName">繁體中文</span></button>
   </div>
@@ -87,6 +95,20 @@
     <h2 id="langTitle">🌐 Language</h2>
     <p class="lang-sub">選擇語言 · Choose your language · 언어 선택 · Chọn ngôn ngữ · 言語を選択 · เลือกภาษา</p>
     <div class="lang-grid" id="langGrid"></div>
+  </dialog>
+
+  <dialog id="lockDlg" class="lock-dlg" aria-labelledby="lockTitle">
+    <div class="lock-head">
+      <div class="lock-badge" aria-hidden="true">🔒</div>
+      <h2 id="lockTitle" data-i18n="lock.title">隊伍已鎖定</h2>
+      <p class="lock-sub" data-i18n="lock.sub"></p>
+      <div class="lock-cd"><small id="lockCdLabel"></small><b id="lockCd">--:--</b></div>
+      <div class="lock-time" id="lockTime"></div>
+    </div>
+    <div class="lock-you" id="lockYou" hidden></div>
+    <div class="lock-roster" id="lockRoster"></div>
+    <div class="lock-bench" id="lockBench" hidden></div>
+    <div class="dlg-actions"><button class="btn primary" type="button" id="lockOk" data-i18n="lock.ok">知道了</button></div>
   </dialog>
 
   <dialog id="signupDlg">
@@ -130,6 +152,6 @@
   </dialog>
 
   <noscript><p class="wrap">JavaScript is required · 這個頁面需要啟用 JavaScript</p></noscript>
-  <script type="module" src="app.js?v=3"></script>
+  <script type="module" src="app.js?v=4"></script>
 </body>
 </html>

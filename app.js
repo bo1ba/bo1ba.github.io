@@ -1,11 +1,15 @@
-import { FIREBASE_CONFIG } from './firebase-config.js?v=3';
-import { LANGS, STRINGS, ITEM_NAMES, detectLang } from './i18n.js?v=3';
+import { FIREBASE_CONFIG } from './firebase-config.js?v=4';
+import { LANGS, STRINGS, ITEM_NAMES, detectLang } from './i18n.js?v=4';
 
 /* ================= 基本資料 ================= */
 const LS_ME = 'roster.me';
 const LS_FILTER = 'roster.filter';
 const LS_LANG = 'roster.lang';
+const LS_NOTIFY = 'roster.notify';
+const LS_LOCKSEEN = 'roster.lockSeen';
 const MAX_PREFS = 3;
+const LOCK_MS = 15 * 60e3;        // 開始前 15 分鐘鎖定
+const END_MS = 6 * 3600e3;        // 開始後 6 小時視為活動結束
 
 const ROLES = {
   tank: { en: 'TANK', emoji: '🛡️', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4 5v6c0 5.2 3.4 9.7 8 11 4.6-1.3 8-5.8 8-11V5l-8-3z"/></svg>' },
@@ -238,6 +242,55 @@ const sortedSignups = () => Object.entries(state.signups || {})
   .sort((a, b) => ((a[1].createdAt || 0) - (b[1].createdAt || 0)) || (a[0] < b[0] ? -1 : 1));
 const weaponLabel = s => { const w = lookup(s.weapon); return w ? w.en : s.weapon; };
 
+/* ---------- 活動時間 / 鎖定 ---------- */
+const startAt = () => { const v = (cfg().event || {}).startAt; return typeof v === 'number' ? v : null; };
+// none = 沒設時間;open = 可報名;locked = 開始前 15 分鐘;started = 進行中;ended = 已結束
+function phase(now = Date.now()) {
+  const s = startAt();
+  if (!s) return 'none';
+  if (now < s - LOCK_MS) return 'open';
+  if (now < s) return 'locked';
+  if (now < s + END_MS) return 'started';
+  return 'ended';
+}
+const isLocked = () => ['locked', 'started'].includes(phase());
+const signupClosed = () => isLocked() && !state.isAdmin;
+
+function fmtDate(ts, timeZone) {
+  return new Intl.DateTimeFormat(langMeta(LANG).locale, {
+    timeZone, weekday: 'short', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(ts);
+}
+function utcOffset(ts) {
+  const m = -new Date(ts).getTimezoneOffset();
+  const a = Math.abs(m);
+  return `UTC${m >= 0 ? '+' : '-'}${Math.floor(a / 60)}${a % 60 ? ':' + pad2(a % 60) : ''}`;
+}
+const localTimeText = ts => `${fmtDate(ts)} (${utcOffset(ts)})`;
+const utcTimeText = ts => `${fmtDate(ts, 'UTC')} UTC`;
+function fmtDur(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const d = Math.floor(s / 86400), hh = Math.floor((s % 86400) / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60;
+  if (d) return t('dur.days', { d, h: hh });
+  return `${hh ? hh + ':' : ''}${pad2(mm)}:${pad2(ss)}`;
+}
+function countdownText(now = Date.now()) {
+  const s = startAt();
+  switch (phase(now)) {
+    case 'open': return t('cd.open', { dur: fmtDur(s - now) });
+    case 'locked': return t('cd.locked', { dur: fmtDur(s - now) });
+    case 'started': return t('cd.started');
+    case 'ended': return t('cd.ended');
+    default: return '';
+  }
+}
+// datetime-local 的值一律當作 UTC
+const toUtcInput = ts => new Date(ts).toISOString().slice(0, 16);
+function fromUtcInput(v) {
+  const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) : null;
+}
+
 function matchesPref(su, x) {
   if (!su) return false;
   return asList(su.prefs).some(p => (p.startsWith('role:') ? x.g.role === p.slice(5) : canon(x.s.weapon) === p));
@@ -266,6 +319,7 @@ function render() {
   else { renderBoard(); renderPool(); state.boardStale = false; }
   renderSelBar();
   applySearch();
+  if ($('#lockDlg').open) renderLockDlg();
 }
 const boardHasFocus = () => !!document.activeElement && document.activeElement.matches('#board input');
 function flushStale() { if (state.boardStale && !state.dragging && !boardHasFocus()) render(); }
@@ -277,13 +331,30 @@ function renderHeader() {
   document.title = `${title} · Albion`;
   const meta = $('#eventMeta');
   meta.replaceChildren();
-  if (ev.time) meta.append(h('span', { class: 'meta-chip' }, '🕘 ', ev.time));
+  const s = startAt();
+  const ph = phase();
+  if (s) {
+    meta.append(
+      h('span', { class: 'meta-chip', title: t('ev.yourTime') }, '🕘 ', localTimeText(s)),
+      h('span', { class: 'meta-chip muted' }, '🌐 ', utcTimeText(s)),
+      h('span', { class: `meta-chip cd cd-${ph}`, id: 'cdChip' }, countdownText()));
+    if (ph === 'locked' || ph === 'started') {
+      meta.append(h('button', { class: 'meta-chip lock-view', type: 'button', onclick: () => openLockDlg(false) }, t('lock.view')));
+    }
+  } else if (ev.time) {
+    meta.append(h('span', { class: 'meta-chip' }, '🕘 ', ev.time));   // 舊版自由文字時間
+  }
   if (ev.note) meta.append(h('span', { class: 'meta-chip' }, '📢 ', ev.note));
-  meta.hidden = !meta.children.length || (state.isAdmin && state.editEvent);
+  meta.hidden = !meta.children.length;
   const edit = $('#eventEdit');
   edit.hidden = !(state.isAdmin && state.editEvent);
-  if (!edit.hidden) for (const inp of edit.querySelectorAll('input')) {
-    if (document.activeElement !== inp) inp.value = ev[inp.dataset.key] || '';
+  if (!edit.hidden) {
+    for (const inp of edit.querySelectorAll('input[data-key]')) {
+      if (document.activeElement !== inp) inp.value = ev[inp.dataset.key] || '';
+    }
+    const st = $('#evStart');
+    if (document.activeElement !== st) st.value = s ? toUtcInput(s) : '';
+    $('#evStartHint').textContent = s ? `= ${t('ev.yourTime')} ${localTimeText(s)}` : '';
   }
 }
 
@@ -320,9 +391,16 @@ function renderLive() {
 
 function renderToolbar() {
   const btn = $('#signupBtn');
-  btn.disabled = !state.backend || !state.loaded.has('signups');
-  btn.textContent = signup(mySid()) ? t('btn.editSignup') : t('btn.signup');
+  const closed = signupClosed();
+  btn.disabled = !state.backend || !state.loaded.has('signups') || closed;
+  btn.textContent = closed ? t('lock.closed') : signup(mySid()) ? t('btn.editSignup') : t('btn.signup');
   $('#loginBtn').hidden = state.isAdmin || !state.backend;
+  const nb = $('#notifyBtn');
+  const ph = phase();
+  nb.hidden = !(ph === 'open' || ph === 'locked');
+  const on = notifyOn();
+  nb.textContent = on ? t('notify.on') : t('notify.off');
+  nb.setAttribute('aria-pressed', String(on));
 }
 
 function renderAdminBar() {
@@ -586,7 +664,7 @@ function renderMine() {
   box.replaceChildren(
     h('div', { class: 'mine-main' }, h('b', {}, t('mine.signed', { name: su.name })), status),
     h('div', { class: 'pchips' }, asList(su.prefs).map(prefChip), su.fill ? fillChip() : null),
-    h('div', { class: 'mine-actions' },
+    signupClosed() ? h('span', { class: 'mine-status' }, t('lock.closed')) : h('div', { class: 'mine-actions' },
       h('button', { class: 'btn small', type: 'button', onclick: () => openSignup('self-edit', sid) }, t('mine.edit')),
       h('button', { class: 'btn small danger', type: 'button', onclick: withdraw }, t('mine.withdraw'))));
 }
@@ -702,6 +780,7 @@ const SIGNUP_TITLES = { 'self-new': 'su.titleNew', 'self-edit': 'su.titleEdit', 
 
 function openSignup(mode, sid) {
   if (!state.backend) return;
+  if (mode.startsWith('self') && signupClosed()) { toast(t('lock.closed')); return; }
   if (mode === 'self-new' && signup(mySid())) { mode = 'self-edit'; sid = mySid(); }
   const su = sid ? signup(sid) : null;
   state.dlg = { mode, sid, prefs: asList(su && su.prefs).slice(0, MAX_PREFS) };
@@ -800,6 +879,7 @@ async function submitSignup(e) {
 
 async function withdraw() {
   const sid = mySid();
+  if (signupClosed()) { toast(t('lock.closed')); return; }
   if (!signup(sid) || !confirm(t('confirm.withdraw'))) return;
   if ($('#signupDlg').open) $('#signupDlg').close();
   await write({ [`signups/${sid}`]: null }, t('toast.withdrawn'));
@@ -856,6 +936,182 @@ async function copyText(text) {
     ta.remove();
     return ok;
   }
+}
+
+/* ================= 鎖定畫面 / 提醒 ================= */
+function myRosterStatus() {
+  const slots = flatSlots();
+  const sid = mySid();
+  let idx = sid ? slotMap().get(sid) : undefined;
+  const me = norm(store.get(LS_ME));
+  if (idx == null && me) {
+    const x = slots.find(y => { const su = signup(sidAt(y.idx)); return su && norm(su.name) === me; });
+    if (x) idx = x.idx;
+  }
+  if (idx != null) return { inRoster: true, x: slots[idx] };
+  if (signup(sid) || (me && sortedSignups().some(([, su]) => norm(su.name) === me))) return { inRoster: false };
+  return null;
+}
+
+function renderLockDlg() {
+  const s = startAt();
+  if (!s) return;
+  $('#lockTime').textContent = `🕘 ${localTimeText(s)} · ${utcTimeText(s)}`;
+  updateLockCountdown();
+
+  const you = $('#lockYou');
+  const st = myRosterStatus();
+  you.hidden = !st;
+  if (st) {
+    you.className = `lock-you ${st.inRoster ? 'ok' : 'bench'}`;
+    you.textContent = st.inRoster
+      ? t('lock.youIn', { no: pad2(st.x.idx + 1), weapon: weaponLabel(st.x.s), role: roleOf(st.x.g).name })
+      : t('lock.youBench');
+  }
+
+  const slots = flatSlots();
+  const myIdx = st && st.inRoster ? st.x.idx : -1;
+  $('#lockRoster').replaceChildren(...comp().map((g, gi) => {
+    const mine = slots.filter(x => x.gi === gi);
+    const role = roleOf(g);
+    return h('section', { class: `lock-group role-${g.role || 'other'}` },
+      h('div', { class: 'lock-ghead' }, h('i'), role.name, h('b', {}, `${mine.filter(x => sidAt(x.idx)).length}/${mine.length}`)),
+      mine.map(x => {
+        const su = signup(sidAt(x.idx));
+        const w = lookup(x.s.weapon);
+        return h('div', { class: `lock-row${su ? '' : ' empty'}${x.idx === myIdx ? ' me' : ''}` },
+          h('span', { class: 'lock-no' }, pad2(x.idx + 1)),
+          w && w.id ? iconImg(w.id, w.en, 44) : h('span', { class: 'glyph' }, '⚔'),
+          h('span', { class: 'lock-w' }, weaponLabel(x.s)),
+          h('span', { class: 'lock-p' }, su ? su.name : t('slot.empty')));
+      }));
+  }));
+
+  const smap = slotMap();
+  const bench = sortedSignups().filter(([sid]) => !smap.has(sid)).map(([, su]) => su.name);
+  const benchEl = $('#lockBench');
+  benchEl.hidden = !bench.length;
+  benchEl.replaceChildren(h('b', {}, `${t('lock.bench')} (${bench.length})`), h('span', {}, bench.join('、')));
+}
+
+function updateLockCountdown(now = Date.now()) {
+  const s = startAt();
+  if (!s) return;
+  const started = now >= s;
+  $('#lockCdLabel').textContent = started ? '' : t('lock.startsIn');
+  $('#lockCd').textContent = started ? t('lock.started') : fmtDur(s - now);
+  $('#lockDlg').classList.toggle('is-started', started);
+}
+
+function openLockDlg(auto) {
+  const dlg = $('#lockDlg');
+  if (!startAt()) return;
+  renderLockDlg();
+  if (!dlg.open) dlg.showModal();
+  if (!auto) $('#lockOk').focus();
+}
+
+function closeLockDlg() {
+  const s = startAt();
+  if (s) store.set(LS_LOCKSEEN, String(s));
+  stopTitleFlash();
+  if ($('#lockDlg').open) $('#lockDlg').close();
+}
+
+const notifyOn = () => store.get(LS_NOTIFY) === '1';
+
+let audioCtx = null;
+function unlockAudio() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch { audioCtx = null; }
+}
+// 鬧鐘:嗶嗶嗶 × 3 組(Web Audio 產生,不需要音檔)
+function chime(rounds = 3) {
+  unlockAudio();
+  if (!audioCtx) return;
+  const t0 = audioCtx.currentTime + 0.05;
+  for (let r = 0; r < rounds; r++) {
+    for (let i = 0; i < 3; i++) {
+      const at = t0 + r * 1.1 + i * 0.22;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = i === 2 ? 1175 : 880;
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(0.3, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.18);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(at);
+      osc.stop(at + 0.2);
+    }
+  }
+}
+
+let flashTimer = null;
+function startTitleFlash() {
+  stopTitleFlash();
+  let on = false;
+  flashTimer = setInterval(() => {
+    on = !on;
+    document.title = on ? t('title.alarm') : `${(cfg().event || {}).title || t('title.default')} · Albion`;
+  }, 1000);
+}
+function stopTitleFlash() {
+  if (!flashTimer) return;
+  clearInterval(flashTimer);
+  flashTimer = null;
+  renderHeader();
+}
+
+function systemNotify() {
+  if (!notifyOn() || !('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    const title = (cfg().event || {}).title || t('title.default');
+    const n = new Notification(t('notify.title', { title }), { body: t('notify.body'), tag: `roster-lock-${startAt()}`, icon: iconUrl('T8_2H_MACE', 128) });
+    n.onclick = () => { window.focus(); n.close(); };
+  } catch { /* 部分手機瀏覽器不支援頁面直接發通知 */ }
+}
+
+// 開始前 15 分鐘:響鈴 + 系統通知 + 標題閃爍 + 跳出鎖定名單
+function triggerAlarm() {
+  chime();
+  systemNotify();
+  if (document.hidden) startTitleFlash();
+  openLockDlg(true);
+}
+
+async function toggleNotify() {
+  if (notifyOn()) {
+    store.set(LS_NOTIFY, '0');
+    toast(t('notify.disabled'));
+  } else {
+    store.set(LS_NOTIFY, '1');
+    chime(1);   // 使用者點擊時先響一次,順便解鎖瀏覽器的自動播放限制
+    let perm = 'Notification' in window ? Notification.permission : 'denied';
+    if (perm === 'default') { try { perm = await Notification.requestPermission(); } catch { perm = 'denied'; } }
+    toast(perm === 'granted' ? t('notify.enabled') : t('notify.denied'), 6000);
+  }
+  renderToolbar();
+}
+
+// 每秒:更新倒數;階段改變時重畫,從「可報名」進入「鎖定」時觸發提醒
+function tick() {
+  const now = Date.now();
+  const ph = phase(now);
+  const chip = $('#cdChip');
+  if (chip) chip.textContent = countdownText(now);
+  if ($('#lockDlg').open) updateLockCountdown(now);
+  if (!state.loaded.has('config')) return;
+  const prev = state.phase;
+  if (ph === prev) return;
+  state.phase = ph;
+  render();
+  const s = startAt();
+  if (ph === 'locked' && prev === 'open') triggerAlarm();
+  else if ((ph === 'locked' || ph === 'started') && store.get(LS_LOCKSEEN) !== String(s)) openLockDlg(true);
+  else if (!(ph === 'locked' || ph === 'started') && $('#lockDlg').open) $('#lockDlg').close();
 }
 
 /* ================= 語言選擇 ================= */
@@ -969,6 +1225,7 @@ function connect(B) {
     state.loaded.add('config');
     seedConfig();
     render();
+    tick();
   });
   B.watch('assign', v => {
     state.assign = v || {};
@@ -1011,8 +1268,18 @@ function bindUI() {
   $('#clearAssignBtn').addEventListener('click', () => { if (confirm(t('confirm.clear'))) write({ assign: null }, t('toast.cleared')); });
   $('#resetBtn').addEventListener('click', () => { if (confirm(t('confirm.reset'))) write({ signups: null, assign: null }, t('toast.reset')); });
 
+  $('#evStart').addEventListener('change', e => {
+    const ts = fromUtcInput(e.target.value);
+    if (ts) write({ 'config/event/startAt': ts, 'config/event/time': null });
+  });
+  $('#evStartClear').addEventListener('click', () => write({ 'config/event/startAt': null }));
+  $('#notifyBtn').addEventListener('click', toggleNotify);
+  $('#lockOk').addEventListener('click', closeLockDlg);
+  $('#lockDlg').addEventListener('cancel', e => { e.preventDefault(); closeLockDlg(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) stopTitleFlash(); });
+
   const saveEvent = debounce((key, val) => write({ [`config/event/${key}`]: val }), 600);
-  for (const inp of document.querySelectorAll('#eventEdit input')) {
+  for (const inp of document.querySelectorAll('#eventEdit input[data-key]')) {
     inp.addEventListener('input', () => {
       if (inp.dataset.key === 'title') $('#title').textContent = inp.value || t('title.default');
       saveEvent(inp.dataset.key, inp.value);
@@ -1043,12 +1310,13 @@ async function init() {
   if (!chosen) openLangDlg(true);   // 第一次來:先選語言
   try {
     if (params.has('mock')) connect((await import('./backend-mock.js')).createBackend());
-    else if (FIREBASE_CONFIG) connect((await import('./backend-firebase.js?v=3')).createBackend(FIREBASE_CONFIG));
+    else if (FIREBASE_CONFIG) connect((await import('./backend-firebase.js?v=4')).createBackend(FIREBASE_CONFIG));
   } catch (e) {
     console.error(e);
     toast(t('toast.dbFail', { err: errMsg(e) }), 8000);
   }
   if (!state.backend) { state.config = null; render(); }
+  setInterval(tick, 1000);
 }
 
 init();
